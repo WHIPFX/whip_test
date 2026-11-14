@@ -11,7 +11,10 @@
 -- stop both, and adopting a door an admin had already set up must give it back exactly as it was.
 --
 -- Everything here goes through the exports, so this resource is the manager, and the door system
--- names it 'resource:whip_test' whatever it passes in: the same path any satellite takes.
+-- names it 'resource:whip_test' whatever it passes in. They are the plumbing a satellite's EnsureDoors
+-- and EnsureDoor run on (__AdoptOrCreateDoor, __ReleaseManagedDoor: whip_core's own since 14 Nov 2026,
+-- when AdoptOrCreateDoor and the managed ReleaseDoor stopped being public), called directly so each
+-- rule can be asked on its own: any manager, how a door was taken, the door in the way.
 --
 -- Also here: a door model written unsigned, the way the map packs list them, is stored signed,
 -- because the game only ever answers signed.
@@ -26,13 +29,13 @@ local MANAGER_2 = { id = 2, key = 'entrance', label = '_test manager 2' }
 
 --- Remove every door this module can have left behind: its own managed doors, and any _test_mdoor.
 local function sweep()
-    for _, d in ipairs(exports.whip_core:GetAllDoors() or {}) do
+    for _, d in ipairs(exports.whip_core:GetDoors() or {}) do
         local mb = d.metadata and d.metadata.managedBy
         if mb and mb.system == ME then
-            exports.whip_core:ReleaseDoor(d.doorId, { id = mb.id })
+            exports.whip_core:__ReleaseManagedDoor(d.doorId, { id = mb.id })
         end
     end
-    for _, d in ipairs(exports.whip_core:GetAllDoors() or {}) do
+    for _, d in ipairs(exports.whip_core:GetDoors() or {}) do
         if type(d.label) == 'string' and d.label:sub(1, 11) == '_test_mdoor' then
             exports.whip_core:DeleteDoor(d.doorId)
         end
@@ -81,9 +84,9 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'AdoptOrCreateDoor makes a door where there is none, marked as made for its manager',
+            name = '__AdoptOrCreateDoor makes a door where there is none, marked as made for its manager',
             fn = function(source, ctx)
-                local door, how = exports.whip_core:AdoptOrCreateDoor({
+                local door, how = exports.whip_core:__AdoptOrCreateDoor({
                     label = '_test_mdoor_made', model = DOOR_MODEL,
                     x = ctx.spotA.x, y = ctx.spotA.y, z = ctx.spotA.z, heading = 0,
                 }, MANAGER_1)
@@ -101,7 +104,7 @@ RegisterTestModule({
         {
             name = 'Asking again for the same door changes nothing',
             fn = function(source, ctx)
-                local door, how = exports.whip_core:AdoptOrCreateDoor({
+                local door, how = exports.whip_core:__AdoptOrCreateDoor({
                     label = '_test_mdoor_made', model = DOOR_MODEL,
                     x = ctx.spotA.x, y = ctx.spotA.y + 0.1, z = ctx.spotA.z, heading = 0,
                 }, MANAGER_1)
@@ -133,7 +136,7 @@ RegisterTestModule({
         {
             name = 'A second manager is refused a door the first one holds',
             fn = function(source, ctx)
-                local door, why, conflictId = exports.whip_core:AdoptOrCreateDoor({
+                local door, why, conflictId = exports.whip_core:__AdoptOrCreateDoor({
                     model = DOOR_MODEL, x = ctx.spotA.x, y = ctx.spotA.y, z = ctx.spotA.z,
                 }, MANAGER_2)
                 assertFalse(door, 'refused')
@@ -161,7 +164,7 @@ RegisterTestModule({
         {
             name = 'A different model at the spot is a conflict, not an adoption',
             fn = function(source, ctx)
-                local door, why, conflictId = exports.whip_core:AdoptOrCreateDoor({
+                local door, why, conflictId = exports.whip_core:__AdoptOrCreateDoor({
                     model = OTHER_MODEL, x = ctx.spotC.x, y = ctx.spotC.y, z = ctx.spotC.z,
                 }, MANAGER_1)
                 assertFalse(door, 'refused')
@@ -184,7 +187,7 @@ RegisterTestModule({
                     requirements = { ace = UNMET_ACE }, autolock = true, autolockDelay = 7,
                 }), 'set up by the admin')
 
-                local door, how = exports.whip_core:AdoptOrCreateDoor({
+                local door, how = exports.whip_core:__AdoptOrCreateDoor({
                     label = '_test_mdoor_adopted', folder = '_test_properties', model = DOOR_MODEL,
                     x = ctx.spotB.x, y = ctx.spotB.y, z = ctx.spotB.z,
                     requirements = { charIds = { ctx.charId } },
@@ -197,7 +200,7 @@ RegisterTestModule({
                 assertEqual(d.folder, '_test_properties', 'filed')
                 assertEqual(d.requirements.charIds[1], ctx.charId, 'access is the manager\'s')
 
-                assertTrue(exports.whip_core:ReleaseDoor(ctx.adoptId, MANAGER_1), 'released')
+                assertTrue(exports.whip_core:__ReleaseManagedDoor(ctx.adoptId, MANAGER_1), 'released')
                 d = exports.whip_core:GetDoor(ctx.adoptId)
                 assertNotNil(d, 'an adopted door survives its release')
                 assertNil(d.metadata and d.metadata.managedBy, 'nobody\'s again')
@@ -216,8 +219,8 @@ RegisterTestModule({
                 assertEqual(#list, 1, 'one door held by manager 1')
                 assertEqual(list[1].doorId, ctx.madeId, 'the one it made')
 
-                assertFalse(exports.whip_core:ReleaseDoor(ctx.madeId, MANAGER_2), 'not by another manager')
-                assertTrue(exports.whip_core:ReleaseDoor(ctx.madeId, MANAGER_1), 'released')
+                assertFalse(exports.whip_core:__ReleaseManagedDoor(ctx.madeId, MANAGER_2), 'not by another manager')
+                assertTrue(exports.whip_core:__ReleaseManagedDoor(ctx.madeId, MANAGER_1), 'released')
                 assertNil(exports.whip_core:GetDoor(ctx.madeId), 'gone from memory')
                 assertDbRowCount('SELECT `doorId` FROM `doors` WHERE `doorId` = ?', { ctx.madeId }, 0, 'and disk')
             end,

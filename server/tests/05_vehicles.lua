@@ -132,10 +132,10 @@ RegisterTestModule({
         -- value crossing an export is a copy, so editing what came back could never reach
         -- whip_core however GetVehicle was written. The guarantee is FiveM's, not the export's.
         {
-            name = 'GetVehicleBy plate finds it',
+            name = 'GetVehicle({ plate }) finds it',
             fn = function()
-                local v = exports.whip_core:GetVehicleBy('plate', _testPlate)
-                assertNotNil(v, 'GetVehicleBy plate')
+                local v = exports.whip_core:GetVehicle({ plate = _testPlate })
+                assertNotNil(v, 'GetVehicle({ plate })')
                 assertEqual(v.vehicleId, _testVehicleId, 'same vehicle')
             end,
         },
@@ -174,7 +174,7 @@ RegisterTestModule({
                 local ped = GetPlayerPed(source)
                 local pos = GetEntityCoords(ped)
                 local netId, sErr = exports.whip_core:SpawnVehicle(
-                    _testVehicleId, pos.x + 5, pos.y, pos.z, GetEntityHeading(ped) or 0.0)
+                    _testVehicleId, vector4(pos.x + 5, pos.y, pos.z, GetEntityHeading(ped) or 0.0))
                 assertOk(netId, sErr, 'SpawnVehicle')
 
                 local v = exports.whip_core:GetVehicle(_testVehicleId)
@@ -235,8 +235,8 @@ RegisterTestModule({
                 assertNotNil(nos, 'nos not nil')
                 assertTrue(nos >= 54 and nos <= 56, 'nos ~ 55, got ' .. tostring(nos))
 
-                local all = exports.whip_core:GetAllVehicleStats(_testVehicleId)
-                assertType(all, 'table', 'GetAllVehicleStats returns a table')
+                local all = exports.whip_core:GetVehicleStats(_testVehicleId)
+                assertType(all, 'table', 'GetVehicleStats returns a table')
                 assertNotNil(all.engine, 'engine present in the stat block')
                 assertNotNil(all._test_nos, 'nos sits in the same block as engine')
             end,
@@ -400,16 +400,16 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'GetVehicleBy netId returns nil for an invalid netId',
+            name = 'GetVehicle({ netId }) returns nil for an invalid netId',
             fn = function()
-                assertNil(exports.whip_core:GetVehicleBy('netId', 999999), 'nil for nonexistent netId')
+                assertNil(exports.whip_core:GetVehicle({ netId = 999999 }), 'nil for nonexistent netId')
             end,
         },
         {
-            -- An unknown lookup kind must answer nil rather than guessing.
-            name = 'GetVehicleBy rejects an unknown kind',
+            -- A reference of an unknown kind must answer nil rather than guessing.
+            name = 'GetVehicle rejects a reference of an unknown kind',
             fn = function()
-                assertNil(exports.whip_core:GetVehicleBy('nonsense', 1), 'nil for unknown kind')
+                assertNil(exports.whip_core:GetVehicle({ nonsense = 1 }), 'nil for unknown kind')
             end,
         },
 
@@ -799,18 +799,19 @@ RegisterTestModule({
             -- already showing the new state, and every in-memory assertion below would pass while
             -- the database still held the old one. That is the exact failure this test exists to
             -- catch, so it has to ask the disk.
-            name = 'StoreVehicle garages it AND clears its position ON DISK',
+            name = 'DespawnVehicle into a garage garages it AND clears its position ON DISK',
             fn = function(source)
                 -- A REAL GARAGE KEY, from the export a satellite would use. The vehicle was
-                -- created with no garage, and StoreVehicle refuses without one.
+                -- created with no garage, so it is given one (StoreVehicle, which DespawnVehicle
+                -- took in on 14 Nov 2026, refused without one).
                 local garages = exports.whip_core:GetGarages()
                 local garageKey = next(garages or {})
                 if not garageKey then
                     skip('no garages configured on this server — nothing to store into')
                 end
 
-                local ok, err = exports.whip_core:StoreVehicle(_testVehicleId, garageKey)
-                assertTrue(ok, 'StoreVehicle: ' .. tostring(err))
+                local ok, err = exports.whip_core:DespawnVehicle(_testVehicleId, { garage = garageKey, refuseOccupied = true })
+                assertTrue(ok, 'DespawnVehicle into a garage: ' .. tostring(err))
 
                 FlushPersistence(source)
 

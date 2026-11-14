@@ -3,11 +3,11 @@
 --
 -- Two registries live behind these exports, and the tests have to keep them apart:
 --
---   serverZones  memory only — ZoneRegister, plus zones clients MIRROR up to the server
+--   serverZones  memory only — RegisterZone, plus zones clients MIRROR up to the server
 --   dbZones      the `zones` table — EnsureZone and the zone editor; loaded at boot, synced to
 --                every client, and removed only by the editor's delete (zeDeleteZone)
 --
--- ZoneRemove only knows the first. The EnsureZone test used to "clean up" with it, which
+-- RemoveZone only knows the first. The EnsureZone test used to "clean up" with it, which
 -- removed nothing: every run's zone stayed in the table, reloaded at every restart and went to
 -- every player who connected. It is now deleted the way the editor deletes one.
 -- ============================================
@@ -33,16 +33,16 @@ RegisterTestModule({
     order    = 14,
     category = 'Zones (Server)',
     setup = function(source, ctx)
-        exports.whip_core:ZoneRegister('_test_srv_box', {
+        exports.whip_core:RegisterZone('_test_srv_box', {
             type = 'box', pos = vector3(100, 100, 30),
             size = vector3(20, 20, 10), heading = 0,
             group = '_test_zones', label = 'Test Box',
         })
-        exports.whip_core:ZoneRegister('_test_srv_sphere', {
+        exports.whip_core:RegisterZone('_test_srv_sphere', {
             type = 'sphere', pos = vector3(200, 200, 30),
             radius = 15.0, group = '_test_zones', label = 'Test Sphere',
         })
-        exports.whip_core:ZoneRegister('_test_srv_poly', {
+        exports.whip_core:RegisterZone('_test_srv_poly', {
             type = 'poly',
             points = { {x=300,y=300}, {x=320,y=300}, {x=320,y=320}, {x=300,y=320} },
             minZ = 25, maxZ = 40, group = '_test_zones', label = 'Test Poly',
@@ -51,7 +51,7 @@ RegisterTestModule({
         -- The EnsureZone test must start from nothing to be a test of CREATING one. Earlier runs
         -- leaked one into the table (see the header), and EnsureZone then returned the old row, so
         -- the creation path had not actually run since the first time.
-        for _, z in ipairs(exports.whip_core:GetAllZones() or {}) do
+        for _, z in ipairs(exports.whip_core:GetZones() or {}) do
             if z.key == ENSURE_KEY and z.id then editorDelete(source, z.id) end
         end
     end,
@@ -61,7 +61,7 @@ RegisterTestModule({
         for _, id in ipairs({ '_test_srv_box', '_test_srv_sphere', '_test_srv_poly',
                               '_test_srv_here', '_test_srv_far', '_test_srv_veh', '_test_srv_temp',
                               '_test_client_zone' }) do
-            pcall(exports.whip_core.ZoneRemove, exports.whip_core, id)
+            pcall(exports.whip_core.RemoveZone, exports.whip_core, id)
         end
 
         if ctx.ensureZoneId and source then
@@ -77,16 +77,16 @@ RegisterTestModule({
                 local rows = #DbQuery('SELECT `zoneId` FROM `zones`')
                 -- The saved zones are the ones with a zoneId; a zone a script made at runtime has none.
                 local saved = 0
-                for _, z in ipairs(exports.whip_core:GetAllZones() or {}) do
+                for _, z in ipairs(exports.whip_core:GetZones() or {}) do
                     if z.zoneId then saved = saved + 1 end
                 end
                 assertEqual(saved, rows, 'the cache holds exactly the zones on disk')
             end,
         },
-        -- ZoneRegister
+        -- RegisterZone
         {
             -- The shape is read as a client's report is (the Director plan's F5, 2 Oct 2026).
-            name = 'ZoneRegister refuses a shape nothing could be inside, saying what is wrong',
+            name = 'RegisterZone refuses a shape nothing could be inside, saying what is wrong',
             fn = function()
                 local cases = {
                     { data = { type = 'circle', pos = vector3(0, 0, 0), radius = 5 },               why = "type is 'sphere'" },
@@ -96,81 +96,81 @@ RegisterTestModule({
                     { data = { type = 'sphere', pos = vector3(0, 0, 99999), radius = 5 },           why = 'off the map' },
                 }
                 for i, c in ipairs(cases) do
-                    local ok, why = exports.whip_core:ZoneRegister('_test_srv_bad' .. i, c.data)
+                    local ok, why = exports.whip_core:RegisterZone('_test_srv_bad' .. i, c.data)
                     assertFalse(ok, ('case %d is refused'):format(i))
                     assertTrue(tostring(why):find(c.why, 1, true) ~= nil, ('case %d says "%s" (got: %s)'):format(i, c.why, tostring(why)))
-                    assertNil(exports.whip_core:GetZoneDef('_test_srv_bad' .. i), ('case %d was not stored'):format(i))
+                    assertNil(exports.whip_core:GetZone('_test_srv_bad' .. i), ('case %d was not stored'):format(i))
                 end
                 local tag = ('_t14_area:%d'):format(GetGameTimer())
-                assertOk(exports.whip_core:ZoneRegister('_test_srv_tagged', {
+                assertOk(exports.whip_core:RegisterZone('_test_srv_tagged', {
                     type = 'sphere', pos = vector3(0, 0, 30), radius = 5, tag = tag }))
                 local okR, n = exports.whip_core:ReleaseTag(tag)
                 assertTrue(okR and n == 1, 'ReleaseTag removes a tagged zone')
-                assertNil(exports.whip_core:GetZoneDef('_test_srv_tagged'), 'it is gone')
+                assertNil(exports.whip_core:GetZone('_test_srv_tagged'), 'it is gone')
             end,
         },
         {
-            name = 'ZoneRegister creates zone',
+            name = 'RegisterZone creates zone',
             fn = function()
-                local def = exports.whip_core:GetZoneDef('_test_srv_box')
+                local def = exports.whip_core:GetZone('_test_srv_box')
                 assertNotNil(def, 'box registered')
                 assertEqual(def.type, 'box', 'type')
                 assertEqual(def.label, 'Test Box', 'label')
             end,
         },
-        -- ZoneContains — box
+        -- IsPointInZone — box
         {
-            name = 'ZoneContains box: inside center',
+            name = 'IsPointInZone box: inside center',
             fn = function()
-                assertTrue(exports.whip_core:ZoneContains('_test_srv_box', vector3(100, 100, 30)), 'center inside')
+                assertTrue(exports.whip_core:IsPointInZone('_test_srv_box', vector3(100, 100, 30)), 'center inside')
             end,
         },
         {
-            name = 'ZoneContains box: outside',
+            name = 'IsPointInZone box: outside',
             fn = function()
-                assertFalse(exports.whip_core:ZoneContains('_test_srv_box', vector3(500, 500, 30)), 'far outside')
+                assertFalse(exports.whip_core:IsPointInZone('_test_srv_box', vector3(500, 500, 30)), 'far outside')
             end,
         },
         {
-            name = 'ZoneContains box: above height',
+            name = 'IsPointInZone box: above height',
             fn = function()
-                assertFalse(exports.whip_core:ZoneContains('_test_srv_box', vector3(100, 100, 50)), 'above')
+                assertFalse(exports.whip_core:IsPointInZone('_test_srv_box', vector3(100, 100, 50)), 'above')
             end,
         },
-        -- ZoneContains — sphere
+        -- IsPointInZone — sphere
         {
-            name = 'ZoneContains sphere: inside',
+            name = 'IsPointInZone sphere: inside',
             fn = function()
-                assertTrue(exports.whip_core:ZoneContains('_test_srv_sphere', vector3(200, 200, 30)), 'center')
-                assertTrue(exports.whip_core:ZoneContains('_test_srv_sphere', vector3(210, 200, 30)), '10m from the centre')
-            end,
-        },
-        {
-            name = 'ZoneContains sphere: outside',
-            fn = function()
-                assertFalse(exports.whip_core:ZoneContains('_test_srv_sphere', vector3(200, 220, 30)), 'outside radius')
-            end,
-        },
-        -- ZoneContains — poly
-        {
-            name = 'ZoneContains poly: inside',
-            fn = function()
-                assertTrue(exports.whip_core:ZoneContains('_test_srv_poly', vector3(310, 310, 32)), 'inside')
+                assertTrue(exports.whip_core:IsPointInZone('_test_srv_sphere', vector3(200, 200, 30)), 'center')
+                assertTrue(exports.whip_core:IsPointInZone('_test_srv_sphere', vector3(210, 200, 30)), '10m from the centre')
             end,
         },
         {
-            name = 'ZoneContains poly: outside bounds',
+            name = 'IsPointInZone sphere: outside',
             fn = function()
-                assertFalse(exports.whip_core:ZoneContains('_test_srv_poly', vector3(330, 330, 32)), 'outside xy')
-                assertFalse(exports.whip_core:ZoneContains('_test_srv_poly', vector3(310, 310, 50)), 'above maxZ')
-                assertFalse(exports.whip_core:ZoneContains('_test_srv_poly', vector3(310, 310, 20)), 'below minZ')
+                assertFalse(exports.whip_core:IsPointInZone('_test_srv_sphere', vector3(200, 220, 30)), 'outside radius')
             end,
         },
-        -- ZoneContains — invalid zone
+        -- IsPointInZone — poly
         {
-            name = 'ZoneContains returns false for invalid zone',
+            name = 'IsPointInZone poly: inside',
             fn = function()
-                assertFalse(exports.whip_core:ZoneContains('_nonexistent', vector3(0, 0, 0)), 'invalid')
+                assertTrue(exports.whip_core:IsPointInZone('_test_srv_poly', vector3(310, 310, 32)), 'inside')
+            end,
+        },
+        {
+            name = 'IsPointInZone poly: outside bounds',
+            fn = function()
+                assertFalse(exports.whip_core:IsPointInZone('_test_srv_poly', vector3(330, 330, 32)), 'outside xy')
+                assertFalse(exports.whip_core:IsPointInZone('_test_srv_poly', vector3(310, 310, 50)), 'above maxZ')
+                assertFalse(exports.whip_core:IsPointInZone('_test_srv_poly', vector3(310, 310, 20)), 'below minZ')
+            end,
+        },
+        -- IsPointInZone — invalid zone
+        {
+            name = 'IsPointInZone returns false for invalid zone',
+            fn = function()
+                assertFalse(exports.whip_core:IsPointInZone('_nonexistent', vector3(0, 0, 0)), 'invalid')
             end,
         },
         -- GetPlayersInZone — was a type check, which passes for an export that returns {} always.
@@ -178,10 +178,10 @@ RegisterTestModule({
             name = 'GetPlayersInZone finds the tester in a zone around them, and not in one far away',
             fn = function(source)
                 local c = GetEntityCoords(GetPlayerPed(source))
-                exports.whip_core:ZoneRegister('_test_srv_here', {
+                exports.whip_core:RegisterZone('_test_srv_here', {
                     type = 'sphere', pos = vector3(c.x, c.y, c.z), radius = 5.0,
                 })
-                exports.whip_core:ZoneRegister('_test_srv_far', {
+                exports.whip_core:RegisterZone('_test_srv_far', {
                     type = 'sphere', pos = vector3(c.x + 500.0, c.y, c.z), radius = 5.0,
                 })
 
@@ -204,7 +204,7 @@ RegisterTestModule({
         {
             name = 'GetVehiclesInZone is empty for a zone with no vehicles in it',
             fn = function()
-                exports.whip_core:ZoneRegister('_test_srv_far', {
+                exports.whip_core:RegisterZone('_test_srv_far', {
                     type = 'sphere', pos = vector3(-9000.0, -9000.0, 0.0), radius = 1.0,
                 })
                 assertEqual(#(exports.whip_core:GetVehiclesInZone('_test_srv_far') or {}), 0,
@@ -218,7 +218,7 @@ RegisterTestModule({
                 if not veh then skip('no vehicle entity exists anywhere on the server to aim a zone at') end
 
                 local c = GetEntityCoords(veh)
-                exports.whip_core:ZoneRegister('_test_srv_veh', {
+                exports.whip_core:RegisterZone('_test_srv_veh', {
                     type = 'sphere', pos = vector3(c.x, c.y, c.z), radius = 2.0,
                 })
                 -- Each entry is { vehicleId, entity } now (WLD-3); vehicleId is nil for an untracked car.
@@ -232,11 +232,11 @@ RegisterTestModule({
                 end
             end,
         },
-        -- GetAllZones
+        -- GetZones
         {
-            name = 'GetAllZones includes test zones',
+            name = 'GetZones includes test zones',
             fn = function()
-                local all = exports.whip_core:GetAllZones()
+                local all = exports.whip_core:GetZones()
                 assertType(all, 'table', 'type')
                 local found = false
                 for _, z in ipairs(all) do
@@ -245,20 +245,20 @@ RegisterTestModule({
                 assertTrue(found, 'box in list')
             end,
         },
-        -- GetZoneDef
+        -- GetZone
         {
-            name = 'GetZoneDef returns correct data',
+            name = 'GetZone returns correct data',
             fn = function()
-                local def = exports.whip_core:GetZoneDef('_test_srv_sphere')
+                local def = exports.whip_core:GetZone('_test_srv_sphere')
                 assertNotNil(def, 'exists')
                 assertEqual(def.type, 'sphere', 'type')
                 assertEqual(def.radius, 15.0, 'radius')
             end,
         },
         {
-            name = 'GetZoneDef returns nil for invalid',
+            name = 'GetZone returns nil for invalid',
             fn = function()
-                assertNil(exports.whip_core:GetZoneDef('_nonexistent'), 'nil')
+                assertNil(exports.whip_core:GetZone('_nonexistent'), 'nil')
             end,
         },
         -- The client mirror. Server-registered zones are what server code trusts, so no client
@@ -269,14 +269,14 @@ RegisterTestModule({
                 assertTrue(ClientExecWait(source, 'whip_core:server:zoneRegistered', 3000,
                     '_test_srv_box', { type = 'sphere', pos = vector3(0.0, 0.0, 0.0), radius = 1.0 }),
                     'the server answered the report')
-                local def = exports.whip_core:GetZoneDef('_test_srv_box')
+                local def = exports.whip_core:GetZone('_test_srv_box')
                 assertEqual(def and def.type, 'box', 'still the box the server registered')
-                assertTrue(exports.whip_core:ZoneContains('_test_srv_box', vector3(100, 100, 30)),
+                assertTrue(exports.whip_core:IsPointInZone('_test_srv_box', vector3(100, 100, 30)),
                     'with its own geometry')
 
                 assertTrue(ClientExecWait(source, 'whip_core:server:zoneRemoved', 3000, '_test_srv_box'),
                     'the server answered the removal')
-                assertNotNil(exports.whip_core:GetZoneDef('_test_srv_box'), 'and a client cannot remove it')
+                assertNotNil(exports.whip_core:GetZone('_test_srv_box'), 'and a client cannot remove it')
             end,
         },
         {
@@ -298,7 +298,7 @@ RegisterTestModule({
                 assertLastReject('whip_core:server:zoneRegistered',
                     'zone data failed validation: radius is a number of metres, above 0 and at most 2000',
                     'a negative radius is refused')
-                assertNil(exports.whip_core:GetZoneDef('_test_client_zone'), 'and nothing was registered')
+                assertNil(exports.whip_core:GetZone('_test_client_zone'), 'and nothing was registered')
             end,
         },
         {
@@ -309,12 +309,12 @@ RegisterTestModule({
                     '_test_client_zone', { type = 'sphere', pos = vector3(c.x, c.y, c.z), radius = 3.0 }),
                     'the server answered the report')
                 assertLastReject('whip_core:server:zoneRegistered', nil, 'accepted')
-                assertTrue(exports.whip_core:ZoneContains('_test_client_zone', vector3(c.x, c.y, c.z)),
+                assertTrue(exports.whip_core:IsPointInZone('_test_client_zone', vector3(c.x, c.y, c.z)),
                     'the server can now answer for it')
 
                 assertTrue(ClientExecWait(source, 'whip_core:server:zoneRemoved', 3000, '_test_client_zone'),
                     'the server answered the removal')
-                assertNil(exports.whip_core:GetZoneDef('_test_client_zone'),
+                assertNil(exports.whip_core:GetZone('_test_client_zone'),
                     'its only reporter took it away')
             end,
         },
@@ -355,7 +355,7 @@ RegisterTestModule({
                 editorDelete(source, ctx.ensureZoneId)
                 assertNil(exports.whip_core:__TestRawFaultArmed(), 'the delete really was attempted and failed')
 
-                assertNotNil(exports.whip_core:GetZoneDef(ctx.ensureZoneId), 'still in memory')
+                assertNotNil(exports.whip_core:GetZone(ctx.ensureZoneId), 'still in memory')
                 assertEqual(ensureRows(), 1, 'still on disk')
             end,
         },
@@ -365,21 +365,21 @@ RegisterTestModule({
                 assertNotNil(ctx.ensureZoneId, 'a zone to delete')
 
                 editorDelete(source, ctx.ensureZoneId)
-                assertNil(exports.whip_core:GetZoneDef(ctx.ensureZoneId), 'gone from memory')
+                assertNil(exports.whip_core:GetZone(ctx.ensureZoneId), 'gone from memory')
                 assertEqual(ensureRows(), 0, 'gone from disk')
                 ctx.ensureZoneId = nil
             end,
         },
-        -- ZoneRemove
+        -- RemoveZone
         {
-            name = 'ZoneRemove removes zone',
+            name = 'RemoveZone removes zone',
             fn = function()
-                exports.whip_core:ZoneRegister('_test_srv_temp', {
+                exports.whip_core:RegisterZone('_test_srv_temp', {
                     type = 'sphere', pos = vector3(0, 0, 30), radius = 5,
                 })
-                assertNotNil(exports.whip_core:GetZoneDef('_test_srv_temp'), 'exists')
-                exports.whip_core:ZoneRemove('_test_srv_temp')
-                assertNil(exports.whip_core:GetZoneDef('_test_srv_temp'), 'removed')
+                assertNotNil(exports.whip_core:GetZone('_test_srv_temp'), 'exists')
+                exports.whip_core:RemoveZone('_test_srv_temp')
+                assertNil(exports.whip_core:GetZone('_test_srv_temp'), 'removed')
             end,
         },
     }

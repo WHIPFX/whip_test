@@ -216,9 +216,9 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'REG-1: ZoneRemove only removes your own zones',
+            name = 'REG-1: RemoveZone only removes your own zones',
             fn = function()
-                local ok, err = exports.whip_core:ZoneRemove('_t46_never_registered')
+                local ok, err = exports.whip_core:RemoveZone('_t46_never_registered')
                 assertFalse(ok, 'a zone we never registered is not ours to remove')
                 assertNotNil(err, 'with a reason')
             end,

@@ -130,7 +130,7 @@ RegisterTestModule({
                 local ids = charIdsOn(door)
                 assertNotNil(ids, 'the door has a charIds list')
                 assertEqual(#ids, 0, 'and nobody is on it')
-                assertFalse(exports.whip_core:IsAuthorizedForDoor(source, door.doorId), 'the tester cannot open it')
+                assertFalse(exports.whip_core:CanUseDoor(source, door.doorId), 'the tester cannot open it')
             end,
         },
         {
@@ -150,7 +150,7 @@ RegisterTestModule({
                 local door = doorOf(ctx.idA, 'front')
                 local ids = charIdsOn(door)
                 assertTrue(ids and #ids == 1 and ids[1] == ctx.charId, 'the door lists the owner')
-                assertTrue(exports.whip_core:IsAuthorizedForDoor(source, door.doorId), 'who can now open it')
+                assertTrue(exports.whip_core:CanUseDoor(source, door.doorId), 'who can now open it')
                 assertTrue(door.locked, 'and it was locked as it changed hands')
                 assertTrue(exports.whip_core:HasPropertyAccess(ctx.idA, { charId = ctx.charId }), 'access')
                 local mine = exports.whip_core:GetCharacterProperties(ctx.charId)
@@ -217,7 +217,7 @@ RegisterTestModule({
         {
             name = 'Furniture inside the space saves, in the interior\'s own coordinates; outside is refused',
             fn = function(source, ctx)
-                local cat = exports.whip_core:GetPropCatalog()
+                local cat = exports.whip_core:__GetPropCatalog()
                 local model = cat and cat.props and cat.props[1] and cat.props[1].model
                 if not model then
                     assertTrue(true, 'the prop catalogue is empty — skipped')
@@ -227,7 +227,7 @@ RegisterTestModule({
                 -- Inside: local (1, -1, 0.1), turned 45 degrees within the room. A save names the version
                 -- of the room it was made over (P-011, 3 Oct 2026).
                 local x, y, z = toWorld(ctx.placeA, 1.0, -1.0, 0.1)
-                local v0 = exports.whip_core:GetPropertyObjectVersion(ctx.idA)
+                local v0 = exports.whip_core:__GetPropertyObjectVersion(ctx.idA)
 
                 -- THE FURNISHER'S LOCK FIRST, as opening the furnisher takes it: a save is taken only from
                 -- the one furnishing the property (audit 8, WLD-2). Let go at the end, as closing it does.
@@ -239,8 +239,8 @@ RegisterTestModule({
                 assertTrue(ClientExecWait(source, 'whip_core:server:propertyObjectsSave', 5000, ctx.idA, {
                     { model = model, x = x, y = y, z = z, rx = 0, ry = 0, rz = (ctx.placeA.yaw + 45.0) % 360 },
                 }, v0), 'the server answered the save')
-                assertEqual(exports.whip_core:GetPropertyObjectCount(ctx.idA), 1, 'one piece saved')
-                assertEqual(exports.whip_core:GetPropertyObjectVersion(ctx.idA), v0 + 1, 'and the room\'s version moved on')
+                assertEqual(exports.whip_core:__GetPropertyObjectCount(ctx.idA), 1, 'one piece saved')
+                assertEqual(exports.whip_core:__GetPropertyObjectVersion(ctx.idA), v0 + 1, 'and the room\'s version moved on')
                 assertDbScalar('SELECT ROUND(`lx`, 2) FROM `property_objects` WHERE `propertyId` = ?', { ctx.idA }, 1.0,
                     'stored relative to the interior (lx)')
                 assertDbScalar('SELECT ROUND(`rz`) FROM `property_objects` WHERE `propertyId` = ?', { ctx.idA }, 45,
@@ -252,14 +252,14 @@ RegisterTestModule({
                 ClientExecWait(source, 'whip_core:server:propertyObjectsSave', 5000, ctx.idA, {
                     { model = model, x = x, y = y, z = z, rx = 0, ry = 0, rz = 0 },
                     { model = model, x = ox, y = oy, z = oz, rx = 0, ry = 0, rz = 0 },
-                }, exports.whip_core:GetPropertyObjectVersion(ctx.idA))
-                assertEqual(exports.whip_core:GetPropertyObjectCount(ctx.idA), 1, 'the save with one outside was refused')
+                }, exports.whip_core:__GetPropertyObjectVersion(ctx.idA))
+                assertEqual(exports.whip_core:__GetPropertyObjectCount(ctx.idA), 1, 'the save with one outside was refused')
 
                 -- P-011: an editor opened on an older (or failed, empty) copy of the room cannot save
                 -- over it. Its version is behind, so the whole save is refused and the room keeps its piece.
                 Wait(4100)
                 ClientExecWait(source, 'whip_core:server:propertyObjectsSave', 5000, ctx.idA, {}, v0)
-                assertEqual(exports.whip_core:GetPropertyObjectCount(ctx.idA), 1,
+                assertEqual(exports.whip_core:__GetPropertyObjectCount(ctx.idA), 1,
                     'an empty save over an old version of the room is refused — the furniture stays')
                 ClientExecWait(source, 'whip_core:server:propertyFurnishClosed', 3000, ctx.idA)   -- the lock goes
             end,

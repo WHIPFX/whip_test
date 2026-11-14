@@ -91,7 +91,7 @@ end
 --- can, and skip — saying which — when the rest is true.
 local function promptsCanRun()
     exports.whip_core:CloseInventory()
-    waitFor(function() return not exports.whip_core:IsAnyUIOpen() end, 2000)
+    waitFor(function() return exports.whip_core:IsGameInputFree() end, 2000)
     if IsPedInAnyVehicle(PlayerPedId(), false) then skip('in a vehicle: world prompts are off') end
     local dead = exports.whip_core:IsPlayerDead()
     if dead then skip('downed: world prompts are off') end
@@ -102,10 +102,10 @@ end
 --- with nothing throws.
 local function awaitLoop(p, x, y, z)
     if waitFor(function() return p.loop >= 3 end, 2500) then return end
-    local uiOpen = exports.whip_core:IsAnyUIOpen()
+    local inputFree = exports.whip_core:IsGameInputFree()
     local onScreen = World3dToScreen2d(x, y, z)
-    skip(('the loop never asked a prompt 1.2m in front — UI open: %s, on screen: %s')
-        :format(tostring(uiOpen), tostring(onScreen)))
+    skip(('the loop never asked a prompt 1.2m in front — game input free: %s, on screen: %s')
+        :format(tostring(inputFree), tostring(onScreen)))
 end
 
 local GROUPS = { '_t_ia', '_t_ia_auto', '_t_ia_rm', '_t_ia_req', '_t_ia_can', '_t_ia_live' }
@@ -529,7 +529,7 @@ RegisterClientTestModule({
 
                 -- A zone the tester stands in: whip_test's own, drawn around them.
                 local pos = GetEntityCoords(PlayerPedId())
-                exports.whip_core:ZoneSphere({ id = '_t_ia_zone', pos = pos, radius = 8.0 })
+                exports.whip_core:RegisterZone({ type = 'sphere', id = '_t_ia_zone', pos = pos, radius = 8.0 })
                 -- Under pcall so the zone goes whatever happens; the failure is raised again after.
                 local okZ, errZ = pcall(function()
                     assertTrue((added({ id = '_t_req_zone', at = { coords = FAR }, label = '[TEST] zone', group = '_t_ia_req',
@@ -537,7 +537,7 @@ RegisterClientTestModule({
                     assertTrue(waitFor(function() return opt1('_t_req_zone').offered == true end, 3000) == true,
                         'standing in the zone passes `zone`')
                 end)
-                exports.whip_core:ZoneRemove('_t_ia_zone')
+                exports.whip_core:RemoveZone('_t_ia_zone')
                 if not okZ then error(errZ, 0) end
 
                 assertTrue((exports.whip_core:RemoveActionGroup('_t_ia_req')), 'removed')

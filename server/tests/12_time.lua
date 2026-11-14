@@ -2,7 +2,7 @@
 -- Time & Weather (server)
 --
 -- THE CLOCK IS DERIVED, NOT STORED (whip_core/server/time.lua): anchor + elapsed x timeScale.
--- So "SetFrozen freezes time" is not proven by IsTimeFrozen() returning true — that only reads
+-- So "SetTimeFrozen freezes time" is not proven by IsTimeFrozen() returning true — that only reads
 -- the flag back. These tests WATCH THE CLOCK: frozen, it must stand still; running at a raised
 -- scale, it must move.
 --
@@ -35,7 +35,7 @@ RegisterTestModule({
         if ctx.origScale ~= nil then exports.whip_core:SetTimeScale(ctx.origScale) end
         if ctx.origHour ~= nil then exports.whip_core:SetTime(ctx.origHour, ctx.origMinute) end
         if ctx.origWeather ~= nil then exports.whip_core:SetWeather(ctx.origWeather) end
-        if ctx.origFrozen ~= nil then exports.whip_core:SetFrozen(ctx.origFrozen) end
+        if ctx.origFrozen ~= nil then exports.whip_core:SetTimeFrozen(ctx.origFrozen) end
 
         -- The layer is per-player state on the TESTER, and a failed test used to leave them
         -- stuck at 22:00 in the rain for the rest of the session.
@@ -47,7 +47,7 @@ RegisterTestModule({
             -- its database write, and at a raised scale a minute can pass inside that await.
             name = 'SetTime sets the clock exactly, and the world row records it',
             fn = function()
-                exports.whip_core:SetFrozen(true)
+                exports.whip_core:SetTimeFrozen(true)
                 exports.whip_core:SetTime(14, 30)
                 local h, m = exports.whip_core:GetTime()
                 assertEqual(h, 14, 'hour after set')
@@ -67,7 +67,7 @@ RegisterTestModule({
         {
             name = 'A frozen clock stands still, even at the fastest time scale',
             fn = function()
-                exports.whip_core:SetFrozen(true)
+                exports.whip_core:SetTimeFrozen(true)
                 exports.whip_core:SetTimeScale(10)
                 exports.whip_core:SetTime(8, 0)
                 assertTrue(exports.whip_core:IsTimeFrozen(), 'the flag reads frozen')
@@ -81,11 +81,11 @@ RegisterTestModule({
         {
             name = 'An unfrozen clock runs at its time scale, from where it was frozen',
             fn = function()
-                exports.whip_core:SetFrozen(true)
+                exports.whip_core:SetTimeFrozen(true)
                 exports.whip_core:SetTimeScale(10)
                 exports.whip_core:SetTime(8, 0)
 
-                exports.whip_core:SetFrozen(false)
+                exports.whip_core:SetTimeFrozen(false)
                 assertFalse(exports.whip_core:IsTimeFrozen(), 'the flag reads running')
 
                 -- Resumes from 08:00 — unfreezing must not credit the clock with the time it stood
@@ -96,7 +96,7 @@ RegisterTestModule({
                 assertTrue(m >= 1 and m < 60,
                     ('it resumed from 08:00 rather than jumping (%d minutes on)'):format(m))
 
-                exports.whip_core:SetFrozen(true)
+                exports.whip_core:SetTimeFrozen(true)
             end,
         },
         {

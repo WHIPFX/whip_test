@@ -294,7 +294,7 @@ local function createOneVehicle(i, ox, oy, oz)
         -- THE MARKER /testloadclean FINDS IT BY. A run that crashes before its stop leaves these
         -- rows in the operator's garage, and a plain blista is indistinguishable from a real one.
         pcall(function() exports.whip_core:SetVehicleData(vehicleId, '_loadtest', true) end)
-        pcall(function() exports.whip_core:SpawnVehicle(vehicleId, x, y, oz, 0.0) end)
+        pcall(function() exports.whip_core:SpawnVehicle(vehicleId, vector4(x, y, oz, 0.0)) end)
         -- Returned whether or not the SPAWN landed: the database row exists either way, and an
         -- unrecorded row is one the cleanup will not delete.
         return vehicleId

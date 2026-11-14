@@ -62,7 +62,7 @@ RegisterClientTestModule({
                 -- An unknown door is nil, not false: false would say "unlocked" (WLD-7).
                 assertNil(exports.whip_core:IsDoorLocked(999999), 'IsDoorLocked of an unknown id is nil')
                 assertNil(exports.whip_core:GetDoor(999999), 'GetDoor of an unknown id')
-                assertNil(exports.whip_core:GetDoorByEntity(0), 'GetDoorByEntity of no entity')
+                assertNil(exports.whip_core:GetDoor({ entity = 0 }), 'GetDoor({ entity }) of no entity')
             end,
         },
 

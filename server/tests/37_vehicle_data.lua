@@ -204,29 +204,29 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'SetVehicleDataMany writes the batch and reports how many landed',
+            name = 'SetVehicleData with a table writes the batch and reports how many landed',
             fn = function(source, ctx)
                 exports.whip_core:ClearAllVehicleData(ctx.vehicleId)
 
-                local written = exports.whip_core:SetVehicleDataMany(ctx.vehicleId, {
+                local written = exports.whip_core:SetVehicleData(ctx.vehicleId, {
                     alpha = 1, bravo = 'two', charlie = { x = 3 },
                 })
                 assertEqual(written, 3, 'three keys reported written')
 
-                local all = exports.whip_core:GetAllVehicleData(ctx.vehicleId)
+                local all = exports.whip_core:GetVehicleData(ctx.vehicleId)
                 assertNotNil(all, 'the whole block reads back')
                 assertEqual(all.alpha, 1, 'alpha')
                 assertEqual(all.bravo, 'two', 'bravo')
                 assertEqual(all.charlie and all.charlie.x, 3, 'charlie')
             end,
         },
-        -- (A test that GetAllVehicleData returns a COPY lived here. It could not fail: everything
+        -- (A test that GetVehicleData returns a COPY lived here. It could not fail: everything
         -- crossing an export is a copy, so writing into the answer never reached the vehicle
         -- whatever VehicleData.getAll handed back. Only an in-core caller could observe that rule.)
         {
             name = 'ClearVehicleData removes one key; ClearAllVehicleData removes the rest, on disk too',
             fn = function(source, ctx)
-                exports.whip_core:SetVehicleDataMany(ctx.vehicleId, { keepMe = 1, dropMe = 2 })
+                exports.whip_core:SetVehicleData(ctx.vehicleId, { keepMe = 1, dropMe = 2 })
 
                 assertTrue(exports.whip_core:ClearVehicleData(ctx.vehicleId, 'dropMe'), 'clear reported success')
                 assertNil(exports.whip_core:GetVehicleData(ctx.vehicleId, 'dropMe'), 'the key is gone')
@@ -237,7 +237,7 @@ RegisterTestModule({
                 assertEqual(stored.keepMe, 1, 'and the neighbour is still in it')
 
                 assertTrue(exports.whip_core:ClearAllVehicleData(ctx.vehicleId), 'clearAll reported success')
-                local all = exports.whip_core:GetAllVehicleData(ctx.vehicleId) or {}
+                local all = exports.whip_core:GetVehicleData(ctx.vehicleId) or {}
                 assertNil(next(all), 'clearAll left nothing behind')
 
                 -- The row is written with NULL for an empty block, not '[]' — absent means absent,
@@ -255,7 +255,7 @@ RegisterTestModule({
                 -- Spawned a long way off, like the load test's cars: the entity exists on the server
                 -- whether or not any client streams it, and the bag is what is under test.
                 local pos = GetEntityCoords(GetPlayerPed(source))
-                local netId, err = exports.whip_core:SpawnVehicle(ctx.vehicleId, pos.x + 1200.0, pos.y + 1200.0, pos.z, 0.0)
+                local netId, err = exports.whip_core:SpawnVehicle(ctx.vehicleId, vector4(pos.x + 1200.0, pos.y + 1200.0, pos.z, 0.0))
                 if not netId then skip('could not spawn the fixture vehicle: ' .. tostring(err)) end
                 ctx.spawned = true
 
@@ -323,7 +323,7 @@ RegisterTestModule({
 
                 local batch = {}
                 for i = 1, 32 do batch['k' .. i] = i end
-                assertEqual(exports.whip_core:SetVehicleDataMany(ctx.vehicleId, batch), 32,
+                assertEqual(exports.whip_core:SetVehicleData(ctx.vehicleId, batch), 32,
                     'all thirty-two fit')
 
                 local ok = exports.whip_core:SetVehicleData(ctx.vehicleId, 'k33', 1)
@@ -348,11 +348,11 @@ RegisterTestModule({
 
                 local batch = {}
                 for i = 1, 40 do batch['m' .. i] = i end
-                local written = exports.whip_core:SetVehicleDataMany(ctx.vehicleId, batch)
+                local written = exports.whip_core:SetVehicleData(ctx.vehicleId, batch)
 
                 assertEqual(written, 32, 'exactly the ceiling was written, not all forty')
 
-                local all = exports.whip_core:GetAllVehicleData(ctx.vehicleId) or {}
+                local all = exports.whip_core:GetVehicleData(ctx.vehicleId) or {}
                 local n = 0
                 for _ in pairs(all) do n = n + 1 end
                 assertEqual(n, 32, 'and the block really holds thirty-two, not more')
@@ -368,8 +368,8 @@ RegisterTestModule({
                 assertFalse(ok, 'set is refused')
                 assertNotNil(err, 'with a reason')
                 -- `false, why` when nothing is written (DX-19, 09-25) — it was `0`, which is TRUE in Lua.
-                local many, manyErr = exports.whip_core:SetVehicleDataMany(GONE, { x = 1 })
-                assertFalse(many, 'setMany writes nothing, and says so with false')
+                local many, manyErr = exports.whip_core:SetVehicleData(GONE, { x = 1 })
+                assertFalse(many, 'a batch writes nothing, and says so with false')
                 assertNotNil(manyErr, 'with a reason')
                 assertNil(exports.whip_core:GetVehicleData(GONE, 'x'), 'get answers nil')
             end,
@@ -439,7 +439,7 @@ RegisterTestModule({
                 assertFalse(cleared, 'clearing it is refused')
 
                 -- One foreign key refuses the whole batch, so nothing half-lands.
-                local written, batchErr = exports.whip_core:SetVehicleDataMany(ctx.vehicleId,
+                local written, batchErr = exports.whip_core:SetVehicleData(ctx.vehicleId,
                     { theirs = 'x', mineToo = 1 })
                 assertFalse(written, 'a batch touching it writes nothing (false, since DX-19)')
                 assertNotNil(batchErr, 'with a reason')
@@ -457,7 +457,7 @@ RegisterTestModule({
             fn = function(source, ctx)
                 exports.whip_core:ClearAllVehicleData(ctx.vehicleId)
                 exports.whip_core:__TestSetVehicleDataAs(ctx.vehicleId, 'theirs', 1, 'fake_satellite')
-                assertTrue(exports.whip_core:SetVehicleDataMany(ctx.vehicleId, { mineA = 1, mineB = 2 }) == 2,
+                assertTrue(exports.whip_core:SetVehicleData(ctx.vehicleId, { mineA = 1, mineB = 2 }) == 2,
                     'two keys of our own')
 
                 assertTrue(exports.whip_core:ClearAllVehicleData(ctx.vehicleId), 'clearAll reported success')
@@ -484,8 +484,8 @@ RegisterTestModule({
                 assertEqual(owners and owners.mine, GetCurrentResourceName(), 'ours is recorded as ours')
 
                 -- Readers never see it: not in the export, not on the entity bag.
-                local all = exports.whip_core:GetAllVehicleData(ctx.vehicleId) or {}
-                assertNil(all['@owners'], 'GetAllVehicleData does not include the owners note')
+                local all = exports.whip_core:GetVehicleData(ctx.vehicleId) or {}
+                assertNil(all['@owners'], 'GetVehicleData does not include the owners note')
 
                 exports.whip_core:ClearAllVehicleData(ctx.vehicleId)
                 exports.whip_core:__TestSetVehicleDataAs(ctx.vehicleId, 'theirs', nil, 'fake_satellite')
@@ -502,7 +502,7 @@ RegisterTestModule({
                 -- Before, the other resource's one key would have left room for only 31 of ours.
                 local batch = {}
                 for i = 1, 32 do batch['b' .. i] = i end
-                assertEqual(exports.whip_core:SetVehicleDataMany(ctx.vehicleId, batch), 32,
+                assertEqual(exports.whip_core:SetVehicleData(ctx.vehicleId, batch), 32,
                     "all 32 of ours fit alongside the other resource's key")
 
                 exports.whip_core:ClearAllVehicleData(ctx.vehicleId)
@@ -521,12 +521,12 @@ RegisterTestModule({
                 })
                 assertEqual(written, 2, 'both stats reported written')
 
-                local stored = exports.whip_core:GetStoredVehicleStats(ctx.vehicleId)
+                local stored = exports.whip_core:GetVehicleStats(ctx.vehicleId, { stored = true })
                 assertNotNil(stored, 'stored stats read back')
                 assertEqual(stored._test_heat, 42, 'first stat')
                 assertEqual(stored._test_wear, 7, 'second stat')
 
-                -- GetStoredVehicleStats reads the cache. Stats are write-behind on their own
+                -- GetVehicleStats { stored = true } reads the cache. Stats are write-behind on their own
                 -- fifteen-second queue, which FlushPersistence now drains, so the row can be asked.
                 assertEqual(vehStatOnDisk(ctx.vehicleId, '_test_heat'), 42, 'the first stat is on disk')
                 assertEqual(vehStatOnDisk(ctx.vehicleId, '_test_wear'), 7, 'the second stat is on disk')
@@ -542,7 +542,7 @@ RegisterTestModule({
                 })
                 assertEqual(written, 1, 'only the numeric one was written')
 
-                local stored = exports.whip_core:GetStoredVehicleStats(ctx.vehicleId) or {}
+                local stored = exports.whip_core:GetVehicleStats(ctx.vehicleId, { stored = true }) or {}
                 assertEqual(stored._test_ok, 5, 'the good value landed')
                 assertNil(stored._test_bad, 'the bad value did not')
             end,
@@ -553,7 +553,7 @@ RegisterTestModule({
                 exports.whip_core:SetVehicleStats(ctx.vehicleId, { _test_heat = 10 })
                 exports.whip_core:AddVehicleStat(ctx.vehicleId, '_test_heat', 15)
 
-                local stored = exports.whip_core:GetStoredVehicleStats(ctx.vehicleId) or {}
+                local stored = exports.whip_core:GetVehicleStats(ctx.vehicleId, { stored = true }) or {}
                 assertEqual(stored._test_heat, 25, 'the delta was added, not assigned')
                 assertEqual(vehStatOnDisk(ctx.vehicleId, '_test_heat'), 25, 'and the sum is what reached disk')
             end,
@@ -579,7 +579,7 @@ RegisterTestModule({
                 local some = exports.whip_core:SetVehicleStats(ctx.vehicleId, { _test_ok = 9, _test_feul = 1 })
                 assertEqual(some, 1, 'the registered stat in a mixed batch was written')
 
-                local stored = exports.whip_core:GetStoredVehicleStats(ctx.vehicleId) or {}
+                local stored = exports.whip_core:GetVehicleStats(ctx.vehicleId, { stored = true }) or {}
                 assertNil(stored._test_feul, 'the typo is not on the car')
                 assertEqual(stored._test_ok, 9, 'the real stat is')
                 assertNil(vehStatOnDisk(ctx.vehicleId, '_test_feul'), 'and the typo never reached the row')
@@ -612,19 +612,19 @@ RegisterTestModule({
                 assertEqual(empty, false, 'nothing numeric, nothing written')
                 assertNotNil(emptyErr, 'and it says so')
 
-                local noData, noDataErr = exports.whip_core:SetVehicleDataMany(GONE, { k = 1 })
-                assertEqual(noData, false, 'SetVehicleDataMany answers false the same way')
+                local noData, noDataErr = exports.whip_core:SetVehicleData(GONE, { k = 1 })
+                assertEqual(noData, false, 'SetVehicleData with a table answers false the same way')
                 assertNotNil(noDataErr, 'with a reason')
             end,
         },
         {
             -- VEH-12. One table with the same names on both sides, and the current value on subscribe.
-            name = 'OnVehicleStatChange { table, now }: the current value first, then each change as one table',
+            name = 'OnVehicleStatChanged { table, now }: the current value first, then each change as one table',
             fn = function(source, ctx)
                 assertTrue(exports.whip_core:SetVehicleStat(ctx.vehicleId, '_test_heat', 5), 'a value to start from')
 
                 local got = {}
-                exports.whip_core:OnVehicleStatChange('_test_heat', function(change)
+                exports.whip_core:OnVehicleStatChanged('_test_heat', function(change)
                     if change.vehicleId == ctx.vehicleId then got[#got + 1] = change end
                 end, 'veh12', { table = true, now = true })
 
@@ -642,19 +642,19 @@ RegisterTestModule({
                 end)
 
                 -- No unregister export: re-registering under the same id replaces it with a no-op.
-                exports.whip_core:OnVehicleStatChange('_test_heat', function() end, 'veh12')
+                exports.whip_core:OnVehicleStatChanged('_test_heat', function() end, 'veh12')
                 if not ok then error(err, 0) end
             end,
         },
         {
             -- '*' hears every stat with its name, so an add-on can follow another resource's stats.
-            name = 'OnVehicleStatChange \'*\': every stat, with its name, and `now` hands over what cars carry',
+            name = 'OnVehicleStatChanged \'*\': every stat, with its name, and `now` hands over what cars carry',
             fn = function(source, ctx)
                 assertTrue(exports.whip_core:SetVehicleStat(ctx.vehicleId, '_test_wear', 3), 'a value to start from')
                 assertTrue(exports.whip_core:SetVehicleStat(ctx.vehicleId, '_test_heat', 40), 'and another')
 
                 local got = {}
-                exports.whip_core:OnVehicleStatChange('*', function(vehicleId, name, value, previous)
+                exports.whip_core:OnVehicleStatChanged('*', function(vehicleId, name, value, previous)
                     if vehicleId == ctx.vehicleId then got[#got + 1] = { name = name, value = value, previous = previous } end
                 end, 'star', { now = true })
 
@@ -680,12 +680,12 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'OnVehicleDataChange { table, now }: the current value first, then set and clear with old values',
+            name = 'OnVehicleDataChanged { table, now }: the current value first, then set and clear with old values',
             fn = function(source, ctx)
                 assertTrue(exports.whip_core:SetVehicleData(ctx.vehicleId, 'listenKey', 1), 'a value to start from')
 
                 local got = {}
-                exports.whip_core:OnVehicleDataChange('listenKey', function(change)
+                exports.whip_core:OnVehicleDataChanged('listenKey', function(change)
                     if change.vehicleId == ctx.vehicleId then got[#got + 1] = change end
                 end, 'veh12', { table = true, now = true })
 
@@ -706,7 +706,7 @@ RegisterTestModule({
                     assertEqual(got[3].old, 2, 'with what it was')
                 end)
 
-                exports.whip_core:OnVehicleDataChange('listenKey', function() end, 'veh12')
+                exports.whip_core:OnVehicleDataChanged('listenKey', function() end, 'veh12')
                 exports.whip_core:ClearVehicleData(ctx.vehicleId, 'listenKey')
                 if not ok then error(err, 0) end
             end,
@@ -798,7 +798,8 @@ RegisterTestModule({
                 --
                 -- OUT FIRST (17 Oct 2026). This assumed the statebag test above left the fixture 'out', as
                 -- a despawn did when it was written. Since 10 Oct (9842980c) a despawn files the car in its
-                -- garage, so it arrived garaged and StoreVehicle rightly said "Vehicle is already stored".
+                -- garage, so it arrived garaged and StoreVehicle (DespawnVehicle with a garage since 14 Nov 2026)
+                -- rightly said "Vehicle is already stored".
                 -- Spawned far off, as the reference test below does, it is out whatever came before.
                 local function listed()
                     for _, v in ipairs(exports.whip_core:GetGarageVehicles(key)) do
@@ -809,7 +810,7 @@ RegisterTestModule({
 
                 if (exports.whip_core:GetVehicle(ctx.vehicleId) or {}).state ~= 'out' then
                     local pos = GetEntityCoords(GetPlayerPed(source))
-                    local netId, sErr = exports.whip_core:SpawnVehicle(ctx.vehicleId, pos.x + 1200.0, pos.y + 1220.0, pos.z, 0.0)
+                    local netId, sErr = exports.whip_core:SpawnVehicle(ctx.vehicleId, vector4(pos.x + 1200.0, pos.y + 1220.0, pos.z, 0.0))
                     if not netId then skip('could not bring the fixture out: ' .. tostring(sErr)) end
                     waitFor(function()
                         local e = NetworkGetEntityFromNetworkId(netId)
@@ -823,8 +824,8 @@ RegisterTestModule({
                     assertNil(listed(), 'a car that is out is not listed, even assigned to this garage')
                 end
 
-                local stored, storeErr = exports.whip_core:StoreVehicle(ctx.vehicleId, key)
-                assertOk(stored, storeErr, 'StoreVehicle into this garage')
+                local stored, storeErr = exports.whip_core:DespawnVehicle(ctx.vehicleId, { garage = key, refuseOccupied = true })
+                assertOk(stored, storeErr, 'DespawnVehicle into this garage')
                 local mine = listed()
                 assertNotNil(mine, 'the fixture is listed in its garage')
                 assertEqual(mine and mine.plate, PLATE, 'with its plate')
@@ -852,7 +853,7 @@ RegisterTestModule({
 
                 -- In the world, so the entity and netId forms have something to find.
                 local pos = GetEntityCoords(GetPlayerPed(source))
-                local netId, err = exports.whip_core:SpawnVehicle(id, pos.x + 1200.0, pos.y + 1220.0, pos.z, 0.0)
+                local netId, err = exports.whip_core:SpawnVehicle(id, vector4(pos.x + 1200.0, pos.y + 1220.0, pos.z, 0.0))
                 if not netId then skip('could not spawn the fixture: ' .. tostring(err)) end
                 local ok, spawnErr = pcall(function()
                     local entity = waitFor(function()
@@ -895,7 +896,7 @@ RegisterTestModule({
             name = 'AdoptVehicle takes the car itself: { entity = } and { netId = }',
             fn = function(source, ctx)
                 local pos = GetEntityCoords(GetPlayerPed(source))
-                local netId, err = exports.whip_core:SpawnVehicle(ctx.vehicleId, pos.x + 1200.0, pos.y + 1240.0, pos.z, 0.0)
+                local netId, err = exports.whip_core:SpawnVehicle(ctx.vehicleId, vector4(pos.x + 1200.0, pos.y + 1240.0, pos.z, 0.0))
                 if not netId then skip('could not spawn the fixture: ' .. tostring(err)) end
                 local ok, runErr = pcall(function()
                     local entity = waitFor(function()
@@ -1338,7 +1339,7 @@ RegisterTestModule({
                         v = exports.whip_core:GetVehicle(ctx.vehicleId)
                     end
                     if v and v.state ~= 'garaged' then
-                        assertOk(exports.whip_core:StoreVehicle(ctx.vehicleId, garageKey))
+                        assertOk(exports.whip_core:DespawnVehicle(ctx.vehicleId, { garage = garageKey, refuseOccupied = true }))
                     end
                 end
 

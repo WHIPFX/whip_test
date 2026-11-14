@@ -6,15 +6,16 @@
 --
 --   doors    EnsureDoors / EnsureDoor (a resource declares its doors by key), UnlinkDoors, one lock
 --            path (UpdateDoor's `locked` moves the linked twin), CreateDoor's answers, IsDoorLocked's
---            nil for an unknown door, IsAuthorizedForDoor's reason, requirements.onDuty
+--            nil for an unknown door, CanUseDoor's reason, requirements.onDuty
 --   zones    EnsureZone follows its declaration, zones by key, DeleteZone, trackPlayers events
 --   time     the setters answer (true | false, reason), IsBlackout, weather layers checked
---   misc     StartTimedAction's reasons, GetActiveTheme
+--   misc     GetActiveTheme (StartTimedAction's reasons were here until 14 Nov 2026, when it went: the
+--            server Progress that replaced it says why it refuses in module 48)
 --
 -- NOT COVERED here, and why:
 --   * a weather layer coming off when its resource stops, and another resource being refused it:
 --     both need a second resource to start and stop mid-run.
---   * a client finding a saved zone by its key (ZoneIsInside, require = { zone = key }): the zone
+--   * a client finding a saved zone by its key (IsInZone, require = { zone = key }): the zone
 --     reaches the client by broadcast, and no client seam reads it back yet.
 
 local DOOR_MODEL = GetHashKey('prop_door_01')
@@ -97,15 +98,17 @@ RegisterTestModule({
         pcall(exports.whip_core.EnsureDoors, exports.whip_core, {}, { id = SET_ID })
         pcall(exports.whip_core.EnsureDoors, exports.whip_core, {}, { id = PAIR_SET })
         -- The door that moved between sets ends in EnsureDoor's own, which the list above does not hold.
+        -- (EnsureDoors with an empty list for its set, 'door:mover': the managed ReleaseDoor went on 14 Nov 2026.)
         if ctx.moverId then
-            pcall(exports.whip_core.ReleaseDoor, exports.whip_core, ctx.moverId, { id = 'door:mover' })
+            pcall(exports.whip_core.EnsureDoors, exports.whip_core, {}, { id = 'door:mover' })
         end
+        pcall(exports.whip_core.EnsureDoors, exports.whip_core, {}, { id = '_test_world_other' })
         for _, id in ipairs(ctx.doors or {}) do
             pcall(exports.whip_core.DeleteDoor, exports.whip_core, id)
         end
         pcall(exports.whip_core.DeleteZone, exports.whip_core, ZONE_KEY)
         for _, id in ipairs({ '_test_world_track', '_test_world_quiet', '_test_world_bucket' }) do
-            pcall(exports.whip_core.ZoneRemove, exports.whip_core, id)
+            pcall(exports.whip_core.RemoveZone, exports.whip_core, id)
         end
         if ctx.blackoutWas ~= nil then pcall(exports.whip_core.SetBlackout, exports.whip_core, ctx.blackoutWas) end
         if source then
@@ -135,17 +138,17 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'IsDoorLocked is nil for an unknown door; IsAuthorizedForDoor says why it refuses',
+            name = 'IsDoorLocked is nil for an unknown door; CanUseDoor says why it refuses',
             fn = function(source, ctx)
                 assertNil(exports.whip_core:IsDoorLocked(999999999), 'an unknown door is nil, not "unlocked"')
-                local ok, why = exports.whip_core:IsAuthorizedForDoor(source, 999999999)
+                local ok, why = exports.whip_core:CanUseDoor(source, 999999999)
                 assertFalse(ok, 'an unknown door is refused')
                 assertEqual(why, 'Door not found', 'and says so')
 
                 local door, err = createDoor(ctx, '_test_world_ace', 32, 30, { requirements = { ace = UNMET_ACE } })
                 assertOk(door, err, 'a door needing an ACE nobody holds')
                 assertEqual(exports.whip_core:IsDoorLocked(door.doorId), true, 'a real door answers true or false')
-                local ok2, why2 = exports.whip_core:IsAuthorizedForDoor(source, door.doorId)
+                local ok2, why2 = exports.whip_core:CanUseDoor(source, door.doorId)
                 assertFalse(ok2, 'refused')
                 assertTrue(has(why2, UNMET_ACE), 'with the reason the player is shown (got: ' .. tostring(why2) .. ')')
             end,
@@ -163,17 +166,17 @@ RegisterTestModule({
 
                 local door, err = createDoor(ctx, '_test_world_duty', 34, 30, { requirements = { jobs = { JOB_KEY } } })
                 assertOk(door, err, 'a door for the job')
-                assertTrue(exports.whip_core:IsAuthorizedForDoor(source, door.doorId),
+                assertTrue(exports.whip_core:CanUseDoor(source, door.doorId),
                     '`jobs` alone means a role there, on duty or not')
 
                 assertOk(exports.whip_core:UpdateDoor(door.doorId, { requirements = { jobs = { JOB_KEY }, onDuty = true } }),
                     nil, 'now it asks for on duty')
-                local ok, why = exports.whip_core:IsAuthorizedForDoor(source, door.doorId)
+                local ok, why = exports.whip_core:CanUseDoor(source, door.doorId)
                 assertFalse(ok, 'off duty, refused')
                 assertTrue(has(why, '(on duty)'), 'saying the job is wanted on duty (got: ' .. tostring(why) .. ')')
 
                 assertOk(exports.whip_core:ClockOn(source, JOB_KEY), nil, 'clocked on')
-                assertTrue(exports.whip_core:IsAuthorizedForDoor(source, door.doorId), 'on duty, let in')
+                assertTrue(exports.whip_core:CanUseDoor(source, door.doorId), 'on duty, let in')
                 pcall(exports.whip_core.ClockOff, exports.whip_core, source, JOB_KEY)
             end,
         },
@@ -237,7 +240,7 @@ RegisterTestModule({
                 assertEqual(mb.system, 'resource:whip_test', 'managed by this resource')
                 assertEqual(mb.id, SET_ID, 'in this set')
                 assertEqual(mb.key, 'a', 'under its key')
-                assertFalse(exports.whip_core:IsAuthorizedForDoor(source, ctx.setA), 'its requirements applied')
+                assertFalse(exports.whip_core:CanUseDoor(source, ctx.setA), 'its requirements applied')
                 assertEqual(#exports.whip_core:GetManagedDoors(SET_ID), 2, 'two doors in the set')
 
                 local res2, err2 = exports.whip_core:EnsureDoors(ctx.list, { id = SET_ID, label = 'Test World' })
@@ -269,7 +272,7 @@ RegisterTestModule({
                 assertTrue(a.requirements == nil or next(a.requirements) == nil, 'requirements left the list, so none')
                 assertTrue(a.autolock, 'autolock on')
                 assertEqual(a.autolockDelay, 7, 'after 7 seconds')
-                assertTrue(exports.whip_core:IsAuthorizedForDoor(source, ctx.setA), 'and anyone may open it now')
+                assertTrue(exports.whip_core:CanUseDoor(source, ctx.setA), 'and anyone may open it now')
             end,
         },
         {
@@ -337,11 +340,14 @@ RegisterTestModule({
                 assertEqual(back.doorId, ctx.moverId, 'the same door again')
                 assertEqual(exports.whip_core:GetDoor(ctx.moverId).metadata.managedBy.id, 'door:mover', 'in EnsureDoor\'s set')
 
-                local other, why, conflict = exports.whip_core:AdoptOrCreateDoor(
-                    { model = DOOR_MODEL, x = x, y = y, z = z }, { id = '_test_world_other', key = 'other' })
+                -- Declared under another key, in another set of this resource's: the door is not taken.
+                local other, why = exports.whip_core:EnsureDoor('other', { model = DOOR_MODEL, coords = vector3(x, y, z) },
+                    { id = '_test_world_other' })
                 assertFalse(other, 'another manager of this resource, another key, is refused the door')
                 assertTrue(has(why, 'already belongs'), 'saying whose (got: ' .. tostring(why) .. ')')
-                assertEqual(conflict, ctx.moverId, 'naming the door in the way')
+                assertTrue(has(why, '#' .. tostring(ctx.moverId)), 'naming the door in the way')
+                assertEqual(exports.whip_core:GetDoor(ctx.moverId).metadata.managedBy.id, 'door:mover',
+                    'and the door stays in the set EnsureDoor gave it')
             end,
         },
         {
@@ -400,9 +406,9 @@ RegisterTestModule({
                 assertOk(zone, err, 'EnsureZone')
                 assertTrue(has(zone.id, 'dbzone_'), 'a saved zone, id ' .. tostring(zone.id))
 
-                assertTrue(exports.whip_core:ZoneContains(ZONE_KEY, here), 'ZoneContains by key')
-                local def = exports.whip_core:GetZoneDef(ZONE_KEY)
-                assertEqual(def and def.id, zone.id, 'GetZoneDef by key')
+                assertTrue(exports.whip_core:IsPointInZone(ZONE_KEY, here), 'IsPointInZone by key')
+                local def = exports.whip_core:GetZone(ZONE_KEY)
+                assertEqual(def and def.id, zone.id, 'GetZone by key')
                 local inside = false
                 for _, s in ipairs(exports.whip_core:GetPlayersInZone(ZONE_KEY) or {}) do
                     if s == source then inside = true end
@@ -413,11 +419,11 @@ RegisterTestModule({
                 Wait(300)
                 assertTrue(ClientExecWait(source, 'whip_core:server:zeUpdateZone', 3000, zone.id, { label = '_test edited' }),
                     'the editor update was answered')
-                assertEqual(exports.whip_core:GetZoneDef(ZONE_KEY).label, '_test edited', 'renamed')
+                assertEqual(exports.whip_core:GetZone(ZONE_KEY).label, '_test edited', 'renamed')
 
                 local same, sErr = exports.whip_core:EnsureZone(ZONE_KEY, decl)
                 assertOk(same, sErr, 'the same declaration again')
-                assertEqual(exports.whip_core:GetZoneDef(ZONE_KEY).label, '_test edited', 'the admin\'s edit stands')
+                assertEqual(exports.whip_core:GetZone(ZONE_KEY).label, '_test edited', 'the admin\'s edit stands')
 
                 decl.radius = 6.0
                 local changed, cErr = exports.whip_core:EnsureZone(ZONE_KEY, decl)
@@ -430,19 +436,19 @@ RegisterTestModule({
         {
             name = 'DeleteZone removes a saved zone by key; an unknown key and a server zone are refused',
             fn = function(source, ctx)
-                if not exports.whip_core:GetZoneDef(ZONE_KEY) then skip('the zone from the test above was not made') end
+                if not exports.whip_core:GetZone(ZONE_KEY) then skip('the zone from the test above was not made') end
                 assertOk(exports.whip_core:DeleteZone(ZONE_KEY), nil, 'deleted by key')
-                assertNil(exports.whip_core:GetZoneDef(ZONE_KEY), 'gone')
+                assertNil(exports.whip_core:GetZone(ZONE_KEY), 'gone')
                 local ok, why = exports.whip_core:DeleteZone(ZONE_KEY)
                 assertFalse(ok, 'deleting it again is refused')
                 assertEqual(why, 'Zone not found', 'and says so')
 
-                assertOk(exports.whip_core:ZoneRegister('_test_world_quiet', {
+                assertOk(exports.whip_core:RegisterZone('_test_world_quiet', {
                     type = 'sphere', pos = vector3(ctx.pos.x, ctx.pos.y, ctx.pos.z), radius = 3.0,
                 }), nil, 'a server zone')
                 local ok2, why2 = exports.whip_core:DeleteZone('_test_world_quiet')
                 assertFalse(ok2, 'DeleteZone does not remove a server zone')
-                assertTrue(has(why2, 'ZoneRemove'), 'and points at what does (got: ' .. tostring(why2) .. ')')
+                assertTrue(has(why2, 'RemoveZone'), 'and points at what does (got: ' .. tostring(why2) .. ')')
             end,
         },
         {
@@ -450,20 +456,20 @@ RegisterTestModule({
             fn = function(source, ctx)
                 zoneEvents = {}
                 local here = vector3(ctx.pos.x, ctx.pos.y, ctx.pos.z)
-                assertOk(exports.whip_core:ZoneRegister('_test_world_track', {
+                assertOk(exports.whip_core:RegisterZone('_test_world_track', {
                     type = 'sphere', pos = here, radius = 5.0, trackPlayers = true,
                 }), nil, 'a tracked zone around the tester')
 
                 local entered = waitFor(function() return zoneEvent('entered', '_test_world_track', source) end, 3500)
                 assertNotNil(entered, 'whip_core:zone:entered for the tester')
 
-                assertOk(exports.whip_core:ZoneRemove('_test_world_track'), nil, 'the zone removed')
+                assertOk(exports.whip_core:RemoveZone('_test_world_track'), nil, 'the zone removed')
                 local exited = waitFor(function() return zoneEvent('exited', '_test_world_track', source) end, 3500)
                 assertNotNil(exited, 'whip_core:zone:exited once it went')
                 assertTrue(exited and exited.removed == true, 'marked removed')
 
                 -- The quiet zone from the test above (or a fresh one) has the tester inside too.
-                exports.whip_core:ZoneRegister('_test_world_quiet', { type = 'sphere', pos = here, radius = 3.0 })
+                exports.whip_core:RegisterZone('_test_world_quiet', { type = 'sphere', pos = here, radius = 3.0 })
                 Wait(2500)
                 assertNil(zoneEvent('entered', '_test_world_quiet', source), 'no event from a zone that did not ask')
             end,
@@ -475,14 +481,14 @@ RegisterTestModule({
             name = 'GetPlayersInZone counts a player standing in it from another routing bucket',
             fn = function(source)
                 local here = GetEntityCoords(GetPlayerPed(source))
-                assertOk(exports.whip_core:ZoneRegister('_test_world_bucket', {
+                assertOk(exports.whip_core:RegisterZone('_test_world_bucket', {
                     type = 'sphere', pos = here, radius = 5.0,
                 }), nil, 'a zone around the tester')
                 local before = GetPlayerRoutingBucket(source)
                 SetPlayerRoutingBucket(source, 7771)
                 local inside = exports.whip_core:GetPlayersInZone('_test_world_bucket') or {}
                 SetPlayerRoutingBucket(source, before)
-                pcall(exports.whip_core.ZoneRemove, exports.whip_core, '_test_world_bucket')
+                pcall(exports.whip_core.RemoveZone, exports.whip_core, '_test_world_bucket')
 
                 local found = false
                 for _, s in ipairs(inside) do if s == source then found = true end end
@@ -546,24 +552,8 @@ RegisterTestModule({
         },
 
         -- ==========================================
-        -- Timed actions, themes
+        -- Themes
         -- ==========================================
-        {
-            name = 'StartTimedAction says why it refused',
-            fn = function(source)
-                local cases = {
-                    { args = { 999999, '_test', 1000 }, why = 'no loaded player' },
-                    { args = { source, '', 1000 },      why = 'needs a name' },
-                    { args = { source, '_test', -5 },   why = 'durationMs' },
-                    { args = { source, '_test', 0/0 },  why = 'durationMs' },
-                }
-                for i, c in ipairs(cases) do
-                    local ok, why = exports.whip_core:StartTimedAction(table.unpack(c.args, 1, 3))
-                    assertFalse(ok, ('case %d is refused'):format(i))
-                    assertTrue(has(why, c.why), ('case %d says "%s" (got: %s)'):format(i, c.why, tostring(why)))
-                end
-            end,
-        },
         {
             name = 'GetActiveTheme answers the theme in force, and who set it',
             fn = function()

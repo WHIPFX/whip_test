@@ -20,9 +20,9 @@ RegisterClientTestModule({
     end,
     tests = {
         {
-            name = 'GetCurrentTime is the time the game is showing',
+            name = 'GetTime is the time the game is showing',
             fn = function()
-                local h, m = exports.whip_core:GetCurrentTime()
+                local h, m = exports.whip_core:GetTime()
                 assertType(h, 'number', 'hour type')
                 assertType(m, 'number', 'minute type')
 
@@ -66,17 +66,17 @@ RegisterClientTestModule({
                 -- Taken with no test layer on, so it is the weather and freeze state to come back to.
                 exports.whip_core:ClearWeatherLayer(TOP)
                 exports.whip_core:ClearWeatherLayer(BASE)
-                local beforeWeather = exports.whip_core:GetCurrentWeather()
+                local beforeWeather = exports.whip_core:GetWeather()
                 local beforeFrozen  = exports.whip_core:IsTimeFrozen()
                 assertType(beforeWeather, 'string', 'weather type')
 
                 local want = (beforeWeather == 'THUNDER') and 'FOGGY' or 'THUNDER'
                 exports.whip_core:SetWeatherLayer(TOP, { priority = 901, weather = want:lower() })
-                assertEqual(exports.whip_core:GetCurrentWeather(), want, 'the layer\'s weather wins (and is upper-cased)')
+                assertEqual(exports.whip_core:GetWeather(), want, 'the layer\'s weather wins (and is upper-cased)')
                 assertEqual(exports.whip_core:GetWeatherLayers().owners.weather, TOP, 'and it owns the field')
                 assertTrue(exports.whip_core:ClearWeatherLayer(TOP), 'the layer is removed')
 
-                assertEqual(exports.whip_core:GetCurrentWeather(), beforeWeather, 'the weather is back')
+                assertEqual(exports.whip_core:GetWeather(), beforeWeather, 'the weather is back')
                 assertEqual(exports.whip_core:IsTimeFrozen(), beforeFrozen, 'the freeze state is back')
                 for _, l in ipairs(exports.whip_core:GetWeatherLayers().layers) do
                     assertTrue(l.name ~= TOP and l.name ~= BASE, ('no test layer left behind (%s)'):format(l.name))

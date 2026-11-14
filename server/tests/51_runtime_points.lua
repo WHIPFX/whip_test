@@ -5,11 +5,11 @@
 -- Two whip_core modules a resource drives from the server, both owned by their caller and released
 -- with a run's tag:
 --
---   * RUNTIME POINTS (server/runtime_points.lua): AddPoint / UpdatePoint / RemovePoint / ListPoints.
+--   * RUNTIME POINTS (server/runtime_points.lua): AddPoint / UpdatePoint / RemovePoint / GetPoints.
 --     A press is the tester's own (ClientExecWait on whip_core:server:useRuntimePoint), so the
 --     distance, audience and requirement checks are the real ones, and onUse is whip_test's function
 --     crossing back over the export.
---   * NPCS (server/npcs.lua): SpawnNpc / GetNpc / ListNpcs / SetNpcState / DespawnNpc, and a point
+--   * NPCS (server/npcs.lua): SpawnNpc / GetNpc / GetNpcs / SetNpcState / DespawnNpc, and a point
 --     riding an NPC by netId.
 --
 -- Each run uses a fresh tag: a released tag stays closed to its owner until that owner stops.
@@ -165,13 +165,13 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'ListPoints by tag; ReleaseTag removes them and closes the tag; RemovePoint, then a press is refused',
+            name = 'GetPoints by tag; ReleaseTag removes them and closes the tag; RemovePoint, then a press is refused',
             fn = function(source, ctx)
                 local id = ctx.pointA
                 if not id then skip('the point from the tests above was not made') end
 
-                local list = exports.whip_core:ListPoints({ tag = ctx.tag })
-                assertEqual(#list, 1, 'ListPoints by tag finds it')
+                local list = exports.whip_core:GetPoints({ tag = ctx.tag })
+                assertEqual(#list, 1, 'GetPoints by tag finds it')
                 assertEqual(list[1].pointId, id, 'by its id')
                 assertNil(list[1].onUse, 'without its onUse')
 
@@ -197,7 +197,7 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'NPCs: SpawnNpc refuses bad definitions; spawns one, GetNpc and ListNpcs read it, SetNpcState changes it',
+            name = 'NPCs: SpawnNpc refuses bad definitions; spawns one, GetNpc and GetNpcs read it, SetNpcState changes it',
             fn = function(_, ctx)
                 local here = { x = ctx.pos.x + 1.5, y = ctx.pos.y, z = ctx.pos.z, heading = 0.0 }
                 local cases = {
@@ -225,11 +225,12 @@ RegisterTestModule({
                 assertEqual(info.netId, netId, 'with its netId')
                 assertTrue(info.alive, 'alive')
                 assertEqual(info.conditions.invincible, true, 'with its conditions')
-                assertEqual(exports.whip_core:GetNpcBy('netId', netId), npcId, 'GetNpcBy finds it by netId')
+                local byNet = exports.whip_core:GetNpc({ netId = netId })
+                assertEqual(byNet and byNet.npcId, npcId, 'GetNpc({ netId }) finds it by its netId')
 
                 local mine = false
-                for _, n in ipairs(exports.whip_core:ListNpcs()) do if n.npcId == npcId then mine = true end end
-                assertTrue(mine, 'ListNpcs lists it')
+                for _, n in ipairs(exports.whip_core:GetNpcs()) do if n.npcId == npcId then mine = true end end
+                assertTrue(mine, 'GetNpcs lists it')
 
                 local ok, why = exports.whip_core:SetNpcState(npcId, { behaviour = 'guard' })
                 assertTrue(ok, 'SetNpcState (' .. tostring(why) .. ')')

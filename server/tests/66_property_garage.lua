@@ -21,7 +21,7 @@ end
 
 local function bayCount(key)
     local n = 0
-    for _, s in ipairs(exports.whip_core:GetGarageSpots() or {}) do
+    for _, s in ipairs(exports.whip_core:__GetGarageSpots() or {}) do
         if s.garageKey == key then n = n + 1 end
     end
     return n

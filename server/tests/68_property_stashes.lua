@@ -87,7 +87,7 @@ RegisterTestModule({
                 assertEqual(#list, 1, 'one stash')
                 ctx.first = list[1] and list[1].containerId
                 assertEqual(stashOf(res, 1), ctx.first, 'the answer names it for the piece')
-                local def = exports.whip_core:GetContainerDef(ctx.first)
+                local def = exports.whip_core:GetContainer(ctx.first)
                 assertTrue(def ~= nil and def.propertyId == ctx.id, 'it is the property\'s')
                 assertTrue(def and def.requirements and def.requirements.property == ctx.id, 'opened by the property\'s people')
                 assertTrue(def and def.prop == false, 'no prop of its own: the furniture is it')
@@ -135,7 +135,7 @@ RegisterTestModule({
                 local back = save(ctx, { piece(ctx, ctx.stash, 2.0, 1, ctx.first) })
                 assertTrue(back.ok, 'saved: ' .. tostring(back.err))
                 assertEqual(#stashes(ctx), 1, 'the empty ones went with their furniture')
-                assertNil(exports.whip_core:GetContainerDef(two), 'deleted')
+                assertNil(exports.whip_core:GetContainer(two), 'deleted')
             end,
         },
         {
@@ -144,14 +144,14 @@ RegisterTestModule({
                 if skipped(ctx) or not ctx.first then return end
                 local slot, err = exports.whip_core:StoreGive({ kind = 'container', id = ctx.first }, ITEM, 2)
                 assertOk(slot, err, 'something put in it')
-                local version = exports.whip_core:GetPropertyObjectVersion(ctx.id)
+                local version = exports.whip_core:__GetPropertyObjectVersion(ctx.id)
 
                 local res = save(ctx, {})
                 assertFalse(res.ok, 'refused')
                 assertTrue(tostring(res.err):find('Empty', 1, true) ~= nil, 'saying to empty it: ' .. tostring(res.err))
-                assertTrue(exports.whip_core:GetContainerDef(ctx.first) ~= nil, 'the stash is still there')
-                assertEqual(exports.whip_core:GetPropertyObjectCount(ctx.id), 1, 'and so is its furniture')
-                assertEqual(exports.whip_core:GetPropertyObjectVersion(ctx.id), version, 'nothing was written')
+                assertTrue(exports.whip_core:GetContainer(ctx.first) ~= nil, 'the stash is still there')
+                assertEqual(exports.whip_core:__GetPropertyObjectCount(ctx.id), 1, 'and so is its furniture')
+                assertEqual(exports.whip_core:__GetPropertyObjectVersion(ctx.id), version, 'nothing was written')
                 assertEqual(exports.whip_core:StoreCount({ kind = 'container', id = ctx.first }, ITEM), 2, 'with what is in it')
             end,
         },
@@ -162,8 +162,8 @@ RegisterTestModule({
                 local ok, err = exports.whip_core:__TestFurnitureClear(ctx.id)
                 assertFalse(ok, 'refused')
                 assertTrue(tostring(err):find('Container Manager', 1, true) ~= nil, 'pointing at the Container Manager: ' .. tostring(err))
-                assertTrue(exports.whip_core:GetContainerDef(ctx.first) ~= nil, 'the stash is still there')
-                assertEqual(exports.whip_core:GetPropertyObjectCount(ctx.id), 1, 'and its furniture')
+                assertTrue(exports.whip_core:GetContainer(ctx.first) ~= nil, 'the stash is still there')
+                assertEqual(exports.whip_core:__GetPropertyObjectCount(ctx.id), 1, 'and its furniture')
             end,
         },
         {
@@ -175,7 +175,7 @@ RegisterTestModule({
                 local res = save(ctx, {})
                 assertTrue(res.ok, 'saved: ' .. tostring(res.err))
                 assertEqual(#stashes(ctx), 0, 'no stashes')
-                assertNil(exports.whip_core:GetContainerDef(ctx.first), 'deleted')
+                assertNil(exports.whip_core:GetContainer(ctx.first), 'deleted')
             end,
         },
         {
@@ -204,7 +204,7 @@ RegisterTestModule({
                 local slot, err = exports.whip_core:StoreGive({ kind = 'container', id = id }, ITEM, 1)
                 assertOk(slot, err, 'something put in it')
                 assertTrue(exports.whip_core:__TestPropertyDelete(ctx.id), 'deleted')
-                assertNil(exports.whip_core:GetContainerDef(id), 'the stash went with it')
+                assertNil(exports.whip_core:GetContainer(id), 'the stash went with it')
             end,
         },
     },

@@ -113,7 +113,7 @@ RegisterTestModule({
 
                 local ok, err = exports.whip_core:RetrieveVehicle(ctx.vehicleId)
                 assertTrue(ok, 'RetrieveVehicle: ' .. tostring(err))
-                local netId, sErr = exports.whip_core:SpawnVehicle(ctx.vehicleId, at.x, at.y, at.z, 0.0)
+                local netId, sErr = exports.whip_core:SpawnVehicle(ctx.vehicleId, vector4(at.x, at.y, at.z, 0.0))
                 assertOk(netId, sErr, 'SpawnVehicle')
                 local entity = NetworkGetEntityFromNetworkId(netId)
 

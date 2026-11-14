@@ -60,12 +60,13 @@ RegisterClientTestModule({
             end,
         },
         {
-            -- VEH-15. The client's GetVehicleBy took only 'entity'.
-            name = 'GetVehicleBy takes plate and netId on the client too, and answers nil for nonsense',
+            -- VEH-15. The client's lookup by what you hold took only 'entity' (GetVehicleBy then; one
+            -- GetVehicle(ref) on both sides since 14 Nov 2026).
+            name = 'GetVehicle takes { plate } and { netId } on the client too, and answers nil for nonsense',
             fn = function()
-                assertNil(exports.whip_core:GetVehicleBy('plate', '_NOPLT_'), 'an unknown plate is nil')
-                assertNil(exports.whip_core:GetVehicleBy('netId', 0), 'netId 0 is nil')
-                assertNil(exports.whip_core:GetVehicleBy('bogus', 1), 'an unknown kind is nil')
+                assertNil(exports.whip_core:GetVehicle({ plate = '_NOPLT_' }), 'an unknown plate is nil')
+                assertNil(exports.whip_core:GetVehicle({ netId = 0 }), 'netId 0 is nil')
+                assertNil(exports.whip_core:GetVehicle({ bogus = 1 }), 'an unknown kind is nil')
 
                 -- A whip car that happens to be near, if there is one; no car is spawned for this.
                 local near
@@ -74,9 +75,9 @@ RegisterClientTestModule({
                 end
                 if not near then skip('no whip vehicle near you to look up') end
 
-                local byPlate = exports.whip_core:GetVehicleBy('plate', near.plate)
+                local byPlate = exports.whip_core:GetVehicle({ plate = near.plate })
                 assertEqual(byPlate and byPlate.vehicleId, near.vehicleId, 'found by its plate')
-                local byNet = exports.whip_core:GetVehicleBy('netId', NetworkGetNetworkIdFromEntity(near.entity))
+                local byNet = exports.whip_core:GetVehicle({ netId = NetworkGetNetworkIdFromEntity(near.entity) })
                 assertEqual(byNet and byNet.vehicleId, near.vehicleId, 'and by its netId')
             end,
         },
@@ -108,9 +109,9 @@ RegisterClientTestModule({
                     'a bare number to GetVehicleStat is the vehicleId')
                 assertEqual(exports.whip_core:GetVehicleEntity(near.vehicleId), near.entity,
                     'and to GetVehicleEntity')
-                assertEqual(type(exports.whip_core:GetAllVehicleData(near.vehicleId)),
-                    type(exports.whip_core:GetAllVehicleData({ entity = near.entity })),
-                    'and to GetAllVehicleData')
+                assertEqual(type(exports.whip_core:GetVehicleData(near.vehicleId)),
+                    type(exports.whip_core:GetVehicleData({ entity = near.entity })),
+                    'and to GetVehicleData')
             end,
         },
         {
@@ -204,11 +205,11 @@ RegisterClientTestModule({
             end,
         },
         {
-            name = 'HasKeyForPlate is false for a plate nobody holds a key to',
+            name = 'HasVehicleKey({ plate }) is false for a plate nobody holds a key to',
             fn = function()
-                assertFalse(exports.whip_core:HasKeyForPlate('_TST_NO_'), 'no key for an unknown plate')
-                assertFalse(exports.whip_core:HasKeyForPlate(''), 'an empty plate matches nothing')
-                assertFalse(exports.whip_core:HasKeyForPlate(nil), 'nor does nil')
+                assertFalse(exports.whip_core:HasVehicleKey({ plate = '_TST_NO_' }), 'no key for an unknown plate')
+                assertFalse(exports.whip_core:HasVehicleKey({ plate = '' }), 'an empty plate matches nothing')
+                assertFalse(exports.whip_core:HasVehicleKey({ plate = 12345 }), 'nor does a plate that is not text')
             end,
         },
     }

@@ -111,9 +111,9 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'GetAllDoors includes test doors',
+            name = 'GetDoors includes test doors',
             fn = function(source, ctx)
-                local all = exports.whip_core:GetAllDoors()
+                local all = exports.whip_core:GetDoors()
                 assertType(all, 'table', 'type')
                 local found = false
                 for _, d in ipairs(all) do
@@ -325,50 +325,50 @@ RegisterTestModule({
         -- Authorization
         -- ==========================================
         {
-            name = 'IsAuthorizedForDoor returns true with no requirements',
+            name = 'CanUseDoor returns true with no requirements',
             fn = function(source, ctx)
-                assertTrue(exports.whip_core:IsAuthorizedForDoor(source, ctx.doorId1), 'no reqs = authorized')
+                assertTrue(exports.whip_core:CanUseDoor(source, ctx.doorId1), 'no reqs = authorized')
             end,
         },
         {
-            name = 'IsAuthorizedForDoor returns false with unmet requirement',
+            name = 'CanUseDoor returns false with unmet requirement',
             fn = function(source, ctx)
                 -- Set a requirement the player definitely doesn't have
                 exports.whip_core:UpdateDoor(ctx.doorId1, {
                     requirements = { ace = UNMET_ACE }
                 })
-                assertFalse(exports.whip_core:IsAuthorizedForDoor(source, ctx.doorId1), 'unmet req = denied')
+                assertFalse(exports.whip_core:CanUseDoor(source, ctx.doorId1), 'unmet req = denied')
                 -- Clean up
                 ClearDoorReqs(ctx.doorId1)
             end,
         },
         {
-            name = 'IsAuthorizedForDoor returns true with empty requirements',
+            name = 'CanUseDoor returns true with empty requirements',
             fn = function(source, ctx)
                 -- Empty table should be treated same as nil (the {} vs nil fix)
                 exports.whip_core:UpdateDoor(ctx.doorId1, { requirements = {} })
-                assertTrue(exports.whip_core:IsAuthorizedForDoor(source, ctx.doorId1), 'empty reqs = authorized')
+                assertTrue(exports.whip_core:CanUseDoor(source, ctx.doorId1), 'empty reqs = authorized')
                 ClearDoorReqs(ctx.doorId1)
             end,
         },
         {
-            name = 'IsAuthorizedForDoor passes ACE check',
+            name = 'CanUseDoor passes ACE check',
             fn = function(source, ctx)
                 -- whip.devtools ACE should be allowed (test player has it)
                 exports.whip_core:UpdateDoor(ctx.doorId1, {
                     requirements = { ace = 'whip.devtools' }
                 })
-                assertTrue(exports.whip_core:IsAuthorizedForDoor(source, ctx.doorId1), 'ACE match = authorized')
+                assertTrue(exports.whip_core:CanUseDoor(source, ctx.doorId1), 'ACE match = authorized')
                 ClearDoorReqs(ctx.doorId1)
             end,
         },
         {
-            name = 'IsAuthorizedForDoor passes charId check',
+            name = 'CanUseDoor passes charId check',
             fn = function(source, ctx)
                 exports.whip_core:UpdateDoor(ctx.doorId1, {
                     requirements = { charIds = { ctx.charId } }
                 })
-                assertTrue(exports.whip_core:IsAuthorizedForDoor(source, ctx.doorId1), 'charId match = authorized')
+                assertTrue(exports.whip_core:CanUseDoor(source, ctx.doorId1), 'charId match = authorized')
                 ClearDoorReqs(ctx.doorId1)
             end,
         },
@@ -479,17 +479,17 @@ RegisterTestModule({
         -- ==========================================
         {
             -- The Door Manager edits requirements/autolock/folder, so the ACE-gated getDoorAll
-            -- path — which serves GetAllDoors' records — must keep FULL records. Ordinary
+            -- path — which serves GetDoors' records — must keep FULL records. Ordinary
             -- clients get the Doors.wireOne projection instead; the client half of this
             -- contract is asserted in whip_test/client/tests/13_doors.lua.
-            name = 'GetAllDoors keeps full records (Door Manager contract)',
+            name = 'GetDoors keeps full records (Door Manager contract)',
             fn = function(source, ctx)
                 exports.whip_core:UpdateDoor(ctx.doorId1, { requirements = { ace = '_test_wire' } })
                 local found = nil
-                for _, d in ipairs(exports.whip_core:GetAllDoors()) do
+                for _, d in ipairs(exports.whip_core:GetDoors()) do
                     if d.doorId == ctx.doorId1 then found = d; break end
                 end
-                assertNotNil(found, 'test door in GetAllDoors')
+                assertNotNil(found, 'test door in GetDoors')
                 assertNotNil(found.requirements, 'requirements present on the full record')
                 assertEqual(found.requirements.ace, '_test_wire', 'requirements content intact')
                 ClearDoorReqs(ctx.doorId1)

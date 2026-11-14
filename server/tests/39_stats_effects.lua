@@ -31,7 +31,7 @@ local FREE   = '_test_stat_unregistered'
 local CARRY  = '_test_stat_carry'
 local EFFECT = '_test_effect_armour'
 
---- OnStatChange listeners (STAT-4) cannot be taken back off — they go when whip_test stops — so
+--- OnStatChanged listeners (STAT-4) cannot be taken back off — they go when whip_test stops — so
 --- every one this module registers reads this first and does nothing unless a test is running it.
 --- `calls` collects what they heard.
 local _listen = { on = false, calls = {} }
@@ -96,10 +96,10 @@ RegisterTestModule({
         -- could never fire — indexing a missing export raises rather than answering nil.)
 
         -- EVERY value test below depends on this player having a stats cache. Without one SetStat
-        -- answers `false, 'Player not loaded'` and GetAllStats `{}, 'Player not loaded'`, so the whole
+        -- answers `false, 'Player not loaded'` and GetStats `{}, 'Player not loaded'`, so the whole
         -- module would fail on assertions about clamping and deltas while the real problem was that
         -- the tester had no cache at all. Ask once, here, and say so plainly.
-        local _, noCache = exports.whip_core:GetAllStats(source)
+        local _, noCache = exports.whip_core:GetStats(source)
         if noCache then
             skip('this player has no stats cache — nothing below can be measured')
         end
@@ -259,10 +259,10 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'GetAllStats includes what was set',
+            name = 'GetStats includes what was set',
             fn = function(source, ctx)
                 exports.whip_core:SetStat(source, STAT, 60)
-                local all = exports.whip_core:GetAllStats(source)
+                local all = exports.whip_core:GetStats(source)
                 assertNotNil(all, 'the stat set reads back')
                 assertEqual(all[STAT], 60, 'and carries the fixture stat')
             end,
@@ -304,10 +304,10 @@ RegisterTestModule({
         -- ==========================================
         {
             -- The server had no way to hear a stat change; a satellite had to poll.
-            name = 'OnStatChange hears a change on the server: who, the new value, the old, and why',
+            name = 'OnStatChanged hears a change on the server: who, the new value, the old, and why',
             fn = function(source, ctx)
                 assertOk(exports.whip_core:SetStat(source, STAT, 40))
-                assertOk(exports.whip_core:OnStatChange(STAT, recorder('named', STAT), '_t39_named'))
+                assertOk(exports.whip_core:OnStatChanged(STAT, recorder('named', STAT), '_t39_named'))
 
                 listenStart()
                 assertOk(exports.whip_core:SetStat(source, STAT, 55, 't39 set'))
@@ -328,9 +328,9 @@ RegisterTestModule({
             end,
         },
         {
-            name = "OnStatChange('*', ..., { table = true }) hears every stat, as one table",
+            name = "OnStatChanged('*', ..., { table = true }) hears every stat, as one table",
             fn = function(source, ctx)
-                assertOk(exports.whip_core:OnStatChange('*', function(change)
+                assertOk(exports.whip_core:OnStatChanged('*', function(change)
                     if not _listen.on or type(change) ~= 'table' then return end
                     _listen.calls[#_listen.calls + 1] = { via = 'star', source = change.source, key = change.key,
                         value = change.value, old = change.old, reason = change.reason }
@@ -349,11 +349,11 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'OnStatChange { now = true } is called once straight away with what is there',
+            name = 'OnStatChanged { now = true } is called once straight away with what is there',
             fn = function(source, ctx)
                 assertOk(exports.whip_core:SetStat(source, STAT, 33))
                 listenStart()
-                assertOk(exports.whip_core:OnStatChange(STAT, recorder('now', STAT), '_t39_now', { now = true }))
+                assertOk(exports.whip_core:OnStatChanged(STAT, recorder('now', STAT), '_t39_now', { now = true }))
                 local first = waitFor(function()
                     for _, c in ipairs(heard(source, STAT, 'now')) do
                         if c.reason == 'now' then return c end
@@ -370,7 +370,7 @@ RegisterTestModule({
             fn = function(source, ctx)
                 -- Otherwise a listener that clamps its own stat calls itself for as long as the
                 -- value keeps moving.
-                assertOk(exports.whip_core:OnStatChange(STAT, function(src, value)
+                assertOk(exports.whip_core:OnStatChanged(STAT, function(src, value)
                     if not _listen.on or not _listen.clamp then return end
                     _listen.calls[#_listen.calls + 1] = { via = 'clamp', source = src, key = STAT, value = value }
                     if value > 90 then exports.whip_core:SetStat(src, STAT, 90, 't39 clamp') end
@@ -388,10 +388,10 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'OnStatChange again with the same id REPLACES the listener; bad arguments are refused',
+            name = 'OnStatChanged again with the same id REPLACES the listener; bad arguments are refused',
             fn = function(source, ctx)
-                assertOk(exports.whip_core:OnStatChange(STAT, recorder('named', STAT), '_t39_named'))
-                assertOk(exports.whip_core:OnStatChange(STAT, recorder('named2', STAT), '_t39_named'))
+                assertOk(exports.whip_core:OnStatChanged(STAT, recorder('named', STAT), '_t39_named'))
+                assertOk(exports.whip_core:OnStatChanged(STAT, recorder('named2', STAT), '_t39_named'))
                 assertOk(exports.whip_core:SetStat(source, STAT, 10))
                 listenStart()
                 assertOk(exports.whip_core:SetStat(source, STAT, 12))
@@ -400,10 +400,10 @@ RegisterTestModule({
                 assertEqual(#old, 0, 'the first listener is gone')
                 assertEqual(#new, 1, 'the second heard it, once')
 
-                local ok1, e1 = exports.whip_core:OnStatChange('', function() end)
+                local ok1, e1 = exports.whip_core:OnStatChanged('', function() end)
                 assertFalse(ok1, 'an empty name is refused')
                 assertNotNil(e1, 'with a reason')
-                local ok2, e2 = exports.whip_core:OnStatChange(STAT, nil)
+                local ok2, e2 = exports.whip_core:OnStatChanged(STAT, nil)
                 assertFalse(ok2, 'no callback is refused')
                 assertNotNil(e2, 'with a reason')
             end,
@@ -518,7 +518,7 @@ RegisterTestModule({
                     'and it is the SECOND application, not the first left in place')
                 assertEqual(exports.whip_core:GetDamageModifier(source), base,
                     'the first instance\'s modifier came off with it')
-                assertEqual(exports.whip_core:SentinelGetTruth(source, DMG_KEY), base ~= 1.0 and base or nil,
+                assertEqual(exports.whip_core:GetSentinelTruth(source, DMG_KEY), base ~= 1.0 and base or nil,
                     'and so did the watched statebag value other clients read')
 
                 exports.whip_core:RemoveEffect(source, EFFECT)
@@ -545,20 +545,20 @@ RegisterTestModule({
                 exports.whip_core:ApplyEffect(source, EFFECT, { duration = 60, damageModifier = 0.5 })
                 assertEqual(exports.whip_core:GetDamageModifier(source), base * 0.5,
                     'one effect halves it')
-                assertEqual(exports.whip_core:SentinelGetTruth(source, DMG_KEY), bagFor(base * 0.5),
+                assertEqual(exports.whip_core:GetSentinelTruth(source, DMG_KEY), bagFor(base * 0.5),
                     'and the watched bag says so')
 
                 exports.whip_core:ApplyEffect(source, EFFECT .. '_2', { duration = 60, damageModifier = 0.5 })
                 assertEqual(exports.whip_core:GetDamageModifier(source), base * 0.25,
                     'two effects multiply rather than replacing one another')
-                assertEqual(exports.whip_core:SentinelGetTruth(source, DMG_KEY), bagFor(base * 0.25),
+                assertEqual(exports.whip_core:GetSentinelTruth(source, DMG_KEY), bagFor(base * 0.25),
                     'and the bag follows')
 
                 exports.whip_core:RemoveEffect(source, EFFECT)
                 exports.whip_core:RemoveEffect(source, EFFECT .. '_2')
                 assertEqual(exports.whip_core:GetDamageModifier(source), base,
                     'and removing both puts it back exactly where it started')
-                assertEqual(exports.whip_core:SentinelGetTruth(source, DMG_KEY), bagFor(base),
+                assertEqual(exports.whip_core:GetSentinelTruth(source, DMG_KEY), bagFor(base),
                     'the bag too — no resistance left behind')
                 assertEqual(Player(source).state[DMG_KEY], bagFor(base), 'on the real statebag as well')
             end,

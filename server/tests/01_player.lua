@@ -26,25 +26,25 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'GetPlayerFromCharId finds player',
+            name = 'GetPlayer({ charId }) finds player',
             fn = function(source)
                 local player = exports.whip_core:GetPlayer(source)
-                local found = exports.whip_core:GetPlayerFromCharId(player.charId)
-                assertNotNil(found, 'GetPlayerFromCharId')
+                local found = exports.whip_core:GetPlayer({ charId = player.charId })
+                assertNotNil(found, 'GetPlayer({ charId })')
                 assertEqual(found.source, source, 'found.source')
             end,
         },
         {
-            name = 'GetPlayerFromUserId finds player',
+            name = 'GetPlayer({ userId }) finds player',
             fn = function(source)
                 local player = exports.whip_core:GetPlayer(source)
-                local found = exports.whip_core:GetPlayerFromUserId(player.userId)
-                assertNotNil(found, 'GetPlayerFromUserId')
+                local found = exports.whip_core:GetPlayer({ userId = player.userId })
+                assertNotNil(found, 'GetPlayer({ userId })')
                 assertEqual(found.source, source, 'found.source')
             end,
         },
         {
-            name = 'GetPlayerFromIdentifier finds by license',
+            name = 'GetPlayer({ identifier }) finds by license',
             fn = function(source)
                 -- IDENTIFIERS HAVE THEIR OWN EXPORT NOW. GetPlayer returns the same sheet whip
                 -- sends to the CLIENT on playerLoaded, and a licence id has no business being
@@ -54,8 +54,8 @@ RegisterTestModule({
                 assertNotNil(ids, 'GetPlayerIdentifiers')
                 assertType(ids.license, 'string', 'license')
 
-                local found = exports.whip_core:GetPlayerFromIdentifier('license', ids.license)
-                assertNotNil(found, 'GetPlayerFromIdentifier')
+                local found = exports.whip_core:GetPlayer({ identifier = ids.license })
+                assertNotNil(found, 'GetPlayer({ identifier })')
                 assertEqual(found.source, source, 'found.source')
             end,
         },
@@ -89,12 +89,12 @@ RegisterTestModule({
             -- Statuses are NOT a field on WhipPlayer and have not been since server/stats.lua
             -- took ownership of them (handover documented at server/events_misc.lua:20-21).
             -- This test previously asserted p.statuses and had been failing ever since.
-            -- The accessor is GetAllStats, on both sides (the client's old GetStatuses alias was
+            -- The accessor is GetStats, on both sides (the client's old GetStatuses alias was
             -- removed 24 Sep 2026).
             name = 'Player statuses are readable through the Stats system',
             fn = function(source)
-                local stats = exports.whip_core:GetAllStats(source)
-                assertType(stats, 'table', 'GetAllStats returns a table')
+                local stats = exports.whip_core:GetStats(source)
+                assertType(stats, 'table', 'GetStats returns a table')
                 assertType(stats.health, 'number', 'health type')
                 assertType(stats.hunger, 'number', 'hunger type')
                 assertType(stats.thirst, 'number', 'thirst type')

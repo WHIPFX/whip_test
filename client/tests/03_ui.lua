@@ -67,9 +67,10 @@ RegisterClientTestModule({
             end,
         },
         {
-            -- UI-9 table form, UI-6 IsProgressActive, and UI-4: a bar is "busy" (IsAnyUIOpen) but
-            -- not a screen (IsAnyScreenOpen), so the HUD and chat stay up for it.
-            name = 'Progress({ ... }) runs; during it IsProgressActive and IsAnyUIOpen are true, IsAnyScreenOpen is not',
+            -- UI-9 table form, UI-6 IsProgressActive, and UI-4: a bar is "busy" (the game input is not
+            -- free: IsGameInputFree, which took over from IsAnyUIOpen on 14 Nov 2026) but not a screen
+            -- (IsAnyScreenOpen), so the HUD and chat stay up for it.
+            name = 'Progress({ ... }) runs; during it IsProgressActive is true, IsGameInputFree and IsAnyScreenOpen are not',
             fn = function()
                 if exports.whip_core:IsAnyScreenOpen() then skip('a screen was already open') end
                 local res = nil
@@ -78,7 +79,7 @@ RegisterClientTestModule({
                 end)
                 Wait(150)
                 assertTrue(exports.whip_core:IsProgressActive(), 'IsProgressActive during the bar')
-                assertTrue(exports.whip_core:IsAnyUIOpen(), 'a bar counts as busy')
+                assertFalse(exports.whip_core:IsGameInputFree(), 'a bar counts as busy: the game input is not free')
                 assertFalse(exports.whip_core:IsAnyScreenOpen(), 'but not as a screen')
 
                 assertTrue(waitFor(function() return res ~= nil end, 3000), 'the bar answered')
@@ -178,30 +179,30 @@ RegisterClientTestModule({
         {
             -- UI-8: a flag per (resource, screen), so closing one screen leaves the other held. And a
             -- resource's own screen does not stop its own bar (UI-4).
-            name = 'SetUIOpen(open, key): one flag per screen; our own screen does not block our own bar',
+            name = 'SetScreenOpen(open, key): one flag per screen; our own screen does not block our own bar',
             fn = function()
-                if exports.whip_core:IsAnyUIOpen() then skip('a screen is already open') end
+                if exports.whip_core:IsAnyScreenOpen() then skip('a screen is already open') end
 
                 -- Under pcall, so a failed check still releases both screens. A held screen left
                 -- behind suppresses every prompt, and the Interactions card then skipped with
                 -- "UI open: true".
                 local ok, err = pcall(function()
-                    assertTrue(exports.whip_core:SetUIOpen(true, 'test_a'), 'screen a declared')
-                    assertTrue(exports.whip_core:SetUIOpen(true, 'test_b'), 'screen b declared')
-                    assertTrue(exports.whip_core:IsAnyUIOpen(), 'held')
+                    assertTrue(exports.whip_core:SetScreenOpen(true, 'test_a'), 'screen a declared')
+                    assertTrue(exports.whip_core:SetScreenOpen(true, 'test_b'), 'screen b declared')
+                    assertTrue(exports.whip_core:IsAnyScreenOpen(), 'held')
 
-                    exports.whip_core:SetUIOpen(false, 'test_a')
-                    assertTrue(exports.whip_core:IsAnyUIOpen(), 'closing a leaves b held')
+                    exports.whip_core:SetScreenOpen(false, 'test_a')
+                    assertTrue(exports.whip_core:IsAnyScreenOpen(), 'closing a leaves b held')
 
                     local barOk, why = exports.whip_core:Progress('[TEST] over our own screen', 300)
                     assertTrue(barOk, ('our own screen does not block our own bar (why: %s)'):format(tostring(why)))
 
-                    exports.whip_core:SetUIOpen(false, 'test_b')
-                    assertFalse(exports.whip_core:IsAnyUIOpen(), 'closing b releases it')
+                    exports.whip_core:SetScreenOpen(false, 'test_b')
+                    assertFalse(exports.whip_core:IsAnyScreenOpen(), 'closing b releases it')
                 end)
                 if not ok then
-                    exports.whip_core:SetUIOpen(false, 'test_a')
-                    exports.whip_core:SetUIOpen(false, 'test_b')
+                    exports.whip_core:SetScreenOpen(false, 'test_a')
+                    exports.whip_core:SetScreenOpen(false, 'test_b')
                     error(err, 0)
                 end
             end,

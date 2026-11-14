@@ -19,10 +19,10 @@ RegisterClientTestModule({
             end,
         },
         {
-            name = 'GetPlayerData and GetCharId name the character the server loaded',
+            name = 'GetPlayer and GetCharId name the character the server loaded',
             fn = function()
-                local data = exports.whip_core:GetPlayerData()
-                assertNotNil(data, 'GetPlayerData')
+                local data = exports.whip_core:GetPlayer()
+                assertNotNil(data, 'GetPlayer')
                 assertType(data.charId, 'number', 'charId type')
 
                 -- NOT ON THE STATEBAG (SEC-15, 26 Sep 2026): a bag reaches every client, so the
@@ -35,7 +35,7 @@ RegisterClientTestModule({
                     'and nil for a server id nobody holds, after asking the server')
 
                 -- Was its own test, reading the same field; now it has to agree with it.
-                assertEqual(exports.whip_core:GetCharId(), data.charId, 'GetCharId agrees with GetPlayerData')
+                assertEqual(exports.whip_core:GetCharId(), data.charId, 'GetCharId agrees with GetPlayer')
             end,
         },
         {
@@ -52,11 +52,11 @@ RegisterClientTestModule({
             end,
         },
         {
-            -- STAT-8, 24 Sep 2026. GetPlayerData was the login snapshot plus cash; isDead, health
+            -- STAT-8, 24 Sep 2026. GetPlayer was the login snapshot plus cash; isDead, health
             -- and armour went stale while IsPlayerDead and GetStat stayed right.
-            name = 'GetPlayerData is live: isDead, health and armour agree with their own exports',
+            name = 'GetPlayer is live: isDead, health and armour agree with their own exports',
             fn = function()
-                local data = exports.whip_core:GetPlayerData()
+                local data = exports.whip_core:GetPlayer()
                 assertEqual(data.isDead, exports.whip_core:IsPlayerDead(), 'isDead is IsPlayerDead()')
                 assertEqual(data.health, exports.whip_core:GetStat('health'), 'health is GetStat(\'health\')')
                 assertEqual(data.armour, exports.whip_core:GetStat('armour'), 'armour is GetStat(\'armour\')')

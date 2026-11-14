@@ -21,7 +21,7 @@ local function drinking()
 end
 
 local function meta()
-    local data = exports.whip_core:GetPlayerData()
+    local data = exports.whip_core:GetPlayer()
     return data and data.metadata or {}
 end
 

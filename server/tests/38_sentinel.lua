@@ -8,7 +8,7 @@
 -- and counts strikes. Three exports make that surface available to satellites, and none of them
 -- had a test.
 --
--- The property worth protecting is narrow and absolute: `SentinelGetTruth` answers what the
+-- The property worth protecting is narrow and absolute: `GetSentinelTruth` answers what the
 -- SERVER wrote, never what the bag currently says. Server logic that reads a bag directly is
 -- reading something a modded client controls — that is the whole reason this file exists — so
 -- a getTruth that ever fell back to the bag would silently undo the protection everywhere at
@@ -47,7 +47,7 @@ RegisterTestModule({
     category = 'Sentinel',
 
     setup = function(source, ctx)
-        -- (An `if not exports.whip_core.SentinelGetTruth then skip() end` guard used to sit here.
+        -- (An `if not exports.whip_core.GetSentinelTruth then skip() end` guard used to sit here.
         -- It could never fire: indexing a missing export raises "No such export" instead of
         -- answering nil, so a missing Sentinel showed as SETUP FAILED either way — which is the
         -- honest result for a core that lost its exports.)
@@ -60,7 +60,7 @@ RegisterTestModule({
         -- bag is noise in the Event Monitor for the rest of the session.
         if ctx and ctx.keys and source then
             for _, key in ipairs(ctx.keys) do
-                pcall(exports.whip_core.SentinelSetPlayerKey, exports.whip_core, source, key, nil)
+                pcall(exports.whip_core.SetSentinelPlayerKey, exports.whip_core, source, key, nil)
             end
         end
     end,
@@ -161,15 +161,15 @@ RegisterTestModule({
         -- The ledger
         -- ==========================================
         {
-            name = 'SentinelSetPlayerKey writes the truth, and GetTruth reads it back',
+            name = 'SetSentinelPlayerKey writes the truth, and GetTruth reads it back',
             fn = function(source, ctx)
                 local key = freshKey()
                 ctx.keys[#ctx.keys + 1] = key
                 exports.whip_core:RegisterSentinelKey({ key = key, family = 'player' })
 
-                assertTrue(exports.whip_core:SentinelSetPlayerKey(source, key, 'alpha'),
+                assertTrue(exports.whip_core:SetSentinelPlayerKey(source, key, 'alpha'),
                     'the sanctioned write reported success')
-                assertEqual(exports.whip_core:SentinelGetTruth(source, key), 'alpha',
+                assertEqual(exports.whip_core:GetSentinelTruth(source, key), 'alpha',
                     'and the server truth is what was written')
             end,
         },
@@ -184,10 +184,10 @@ RegisterTestModule({
                 ctx.keys[#ctx.keys + 1] = key
                 exports.whip_core:RegisterSentinelKey({ key = key, family = 'player' })
 
-                exports.whip_core:SentinelSetPlayerKey(source, key, 'bravo')
+                exports.whip_core:SetSentinelPlayerKey(source, key, 'bravo')
 
                 assertEqual(Player(source).state[key], 'bravo', 'the bag carries it')
-                assertEqual(exports.whip_core:SentinelGetTruth(source, key), 'bravo',
+                assertEqual(exports.whip_core:GetSentinelTruth(source, key), 'bravo',
                     'and the ledger agrees')
             end,
         },
@@ -202,9 +202,9 @@ RegisterTestModule({
                 ctx.keys[#ctx.keys + 1] = key
                 exports.whip_core:RegisterSentinelKey({ key = key, family = 'player' })
 
-                exports.whip_core:SentinelSetPlayerKey(source, key, false)
+                exports.whip_core:SetSentinelPlayerKey(source, key, false)
 
-                local truth = exports.whip_core:SentinelGetTruth(source, key)
+                local truth = exports.whip_core:GetSentinelTruth(source, key)
                 assertFalse(truth, 'the truth is false')
                 assertNotNil(truth, 'and specifically NOT nil — the two mean different things here')
             end,
@@ -212,21 +212,21 @@ RegisterTestModule({
         {
             name = 'An unwritten key and an unknown source both read nil',
             fn = function(source, ctx)
-                assertNil(exports.whip_core:SentinelGetTruth(source, '_test_sentinel_never_written'),
+                assertNil(exports.whip_core:GetSentinelTruth(source, '_test_sentinel_never_written'),
                     'a key the server never wrote has no truth')
-                assertNil(exports.whip_core:SentinelGetTruth(99999, '_test_sentinel_never_written'),
+                assertNil(exports.whip_core:GetSentinelTruth(99999, '_test_sentinel_never_written'),
                     'and a source with no ledger answers nil rather than raising')
             end,
         },
         {
-            name = 'SentinelSetPlayerKey refuses malformed arguments, and says why',
+            name = 'SetSentinelPlayerKey refuses malformed arguments, and says why',
             fn = function(source, ctx)
                 -- It writes straight onto a player's bag, so it validates before it touches
                 -- anything rather than letting a bad key become a bag entry nobody watches.
-                local ok1, e1 = exports.whip_core:SentinelSetPlayerKey('not a number', 'k', 1)
+                local ok1, e1 = exports.whip_core:SetSentinelPlayerKey('not a number', 'k', 1)
                 assertFalse(ok1, 'a non-numeric source is refused')
                 assertEqual(e1, 'no such player', 'naming the problem')
-                local ok2, e2 = exports.whip_core:SentinelSetPlayerKey(source, 123, 1)
+                local ok2, e2 = exports.whip_core:SetSentinelPlayerKey(source, 123, 1)
                 assertFalse(ok2, 'a non-string key is refused')
                 assertNotNil(e2, 'with a reason')
             end,
@@ -246,11 +246,11 @@ RegisterTestModule({
             fn = function(source, ctx)
                 -- Literals, as above: whip_core's key constants do not cross into this resource.
                 for _, key in ipairs({ 'whipDead', 'whipJob', 'whipDamageMod' }) do
-                    local before = exports.whip_core:SentinelGetTruth(source, key)
-                    local ok, err = exports.whip_core:SentinelSetPlayerKey(source, key, before)
+                    local before = exports.whip_core:GetSentinelTruth(source, key)
+                    local ok, err = exports.whip_core:SetSentinelPlayerKey(source, key, before)
                     assertFalse(ok, ('"%s" is refused'):format(key))
                     assertEqual(err, ('key "%s" is owned by whip_core'):format(key), ('"%s" names its owner'):format(key))
-                    assertEqual(exports.whip_core:SentinelGetTruth(source, key), before,
+                    assertEqual(exports.whip_core:GetSentinelTruth(source, key), before,
                         ('and the truth for "%s" is untouched'):format(key))
                 end
             end,
@@ -260,9 +260,9 @@ RegisterTestModule({
             fn = function(source, ctx)
                 local key = freshKey()   -- never registered
                 ctx.keys[#ctx.keys + 1] = key
-                local ok, err = exports.whip_core:SentinelSetPlayerKey(source, key, 'charlie')
+                local ok, err = exports.whip_core:SetSentinelPlayerKey(source, key, 'charlie')
                 assertTrue(ok, 'accepted: ' .. tostring(err))
-                assertEqual(exports.whip_core:SentinelGetTruth(source, key), 'charlie', 'and written')
+                assertEqual(exports.whip_core:GetSentinelTruth(source, key), 'charlie', 'and written')
             end,
         },
         {
@@ -271,10 +271,10 @@ RegisterTestModule({
                 local key = freshKey()
                 ctx.keys[#ctx.keys + 1] = key
                 exports.whip_core:RegisterSentinelKey({ key = key, family = 'player' })
-                local ok, err = exports.whip_core:SentinelSetPlayerKey(99999, key, 'x')
+                local ok, err = exports.whip_core:SetSentinelPlayerKey(99999, key, 'x')
                 assertFalse(ok, 'refused')
                 assertEqual(err, 'no such player', 'naming the problem')
-                assertNil(exports.whip_core:SentinelGetTruth(99999, key), 'and no ledger was made for it')
+                assertNil(exports.whip_core:GetSentinelTruth(99999, key), 'and no ledger was made for it')
             end,
         },
         {
@@ -284,14 +284,14 @@ RegisterTestModule({
                 ctx.keys[#ctx.keys + 1] = key
                 exports.whip_core:RegisterSentinelKey({ key = key, family = 'player' })
 
-                exports.whip_core:SentinelSetPlayerKey(source, key, 'first')
-                exports.whip_core:SentinelSetPlayerKey(source, key, 'second')
-                assertEqual(exports.whip_core:SentinelGetTruth(source, key), 'second',
+                exports.whip_core:SetSentinelPlayerKey(source, key, 'first')
+                exports.whip_core:SetSentinelPlayerKey(source, key, 'second')
+                assertEqual(exports.whip_core:GetSentinelTruth(source, key), 'second',
                     'the latest write is the truth')
 
                 -- nil is how a satellite says "this player no longer carries this key".
-                exports.whip_core:SentinelSetPlayerKey(source, key, nil)
-                assertNil(exports.whip_core:SentinelGetTruth(source, key),
+                exports.whip_core:SetSentinelPlayerKey(source, key, nil)
+                assertNil(exports.whip_core:GetSentinelTruth(source, key),
                     'and writing nil clears it')
             end,
         },

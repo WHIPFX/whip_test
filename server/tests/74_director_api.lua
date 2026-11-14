@@ -11,7 +11,7 @@ local NS = 'wtest'
 local CARDS = { NS .. '.ping', NS .. '.now', NS .. '.bell', NS .. '.boom', NS .. '.hold', NS .. '.gift' }
 
 local function cardListed(t)
-    for _, c in ipairs(exports.whip_core:ListDirectorCards({ owner = GetCurrentResourceName() }) or {}) do
+    for _, c in ipairs(exports.whip_core:GetDirectorCards({ owner = GetCurrentResourceName() }) or {}) do
         if c.type == t then return c end
     end
     return nil
@@ -66,15 +66,17 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'RegisterDirectorCard is refused unless through Whip.card, and in whip_core\'s namespaces',
+            -- The plumbing under Whip.card (__RegisterDirectorCard; RegisterDirectorCard until 14 Nov 2026),
+            -- called straight: a bare definition is refused, pointing at the helper.
+            name = '__RegisterDirectorCard is refused unless through Whip.card, and in whip_core\'s namespaces',
             fn = function()
-                local ok, why = exports.whip_core:RegisterDirectorCard(NS .. '.raw', { title = 'Raw', outputs = { 'x' } }, function() end)
+                local ok, why = exports.whip_core:__RegisterDirectorCard(NS .. '.raw', { title = 'Raw', outputs = { 'x' } }, function() end)
                 assertFalse(ok, 'a bare definition refused')
                 assertTrue(tostring(why):find('Whip.card', 1, true) ~= nil, 'saying to use Whip.card (' .. tostring(why) .. ')')
                 Whip.card('scenario.mine', { title = '[TEST] Not mine', outputs = { 'x' }, run = function() return 'x' end })
                 Wait(200)
                 local c
-                for _, d in ipairs(exports.whip_core:ListDirectorCards() or {}) do if d.type == 'scenario.mine' then c = d end end
+                for _, d in ipairs(exports.whip_core:GetDirectorCards() or {}) do if d.type == 'scenario.mine' then c = d end end
                 assertNil(c, 'a card in whip_core\'s own namespace is not added')
                 pcall(Whip.removeCard, 'scenario.mine')
             end,
@@ -115,7 +117,7 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'A test run is no script\'s: not in ListScenarioRuns, not by its id, no run events; answered later, it goes on',
+            name = 'A test run is no script\'s: not in GetScenarioRuns, not by its id, no run events; answered later, it goes on',
             fn = function(source)
                 held.callId, held.runId = nil, nil
                 -- Every run scripts were told of in the window (a real one may start meanwhile): the test's
@@ -140,7 +142,7 @@ RegisterTestModule({
                 local byId, listed, answered, answerWhy = nil, false, nil, nil
                 if got then
                     byId = exports.whip_core:GetScenarioRun(held.runId)
-                    for _, v in ipairs(exports.whip_core:ListScenarioRuns() or {}) do
+                    for _, v in ipairs(exports.whip_core:GetScenarioRuns() or {}) do
                         if v.id == held.runId then listed = true end
                     end
                     answered, answerWhy = Whip.answerCard(held.callId, 'done', { note = 'later' })
@@ -151,8 +153,8 @@ RegisterTestModule({
                 RemoveEventHandler(h2)
                 assertTrue(got ~= nil, 'the card was at work')
                 assertFalse(byId, 'GetScenarioRun does not find it')
-                assertFalse(listed, 'ListScenarioRuns leaves it out')
-                assertTrue(answered == true, 'AnswerDirectorCard took the answer (' .. tostring(answerWhy) .. ')')
+                assertFalse(listed, 'GetScenarioRuns leaves it out')
+                assertTrue(answered == true, 'Whip.answerCard took the answer (' .. tostring(answerWhy) .. ')')
                 assertTrue(type(result) == 'table' and result.outcome == 'done' and result.data and result.data.note == 'later',
                     'the answer given later is its outcome (' .. tostring(rwhy) .. ')')
                 for _, id in ipairs(told) do assertNotEqual(id, held.runId, 'scripts heard nothing of the test run') end

@@ -2,7 +2,7 @@
 -- Director: Security — what TestDirectorScenario and SteerDirectorTest refuse, and that a test is no script's run
 -- ============================================
 --
--- A scripted test is a Test: it is hidden from the Director API as a builder's is (ListScenarioRuns, GetScenarioRun,
+-- A scripted test is a Test: it is hidden from the Director API as a builder's is (GetScenarioRuns, GetScenarioRun,
 -- the run events), a script may not write its variables or crew, and only the resource that started it may steer it
 -- or read its result. What it is given is checked before anything runs.
 
@@ -112,9 +112,9 @@ RegisterTestModule({
                 Wait(500)
                 RemoveEventHandler(h1)
                 local listed, listedWithTests = false, false
-                for _, v in ipairs(exports.whip_core:ListScenarioRuns() or {}) do if v.id == r.runId then listed = true end end
-                for _, v in ipairs(exports.whip_core:ListScenarioRuns({ tests = true }) or {}) do if v.id == r.runId then listedWithTests = true end end
-                assertFalse(listed, 'not in ListScenarioRuns')
+                for _, v in ipairs(exports.whip_core:GetScenarioRuns() or {}) do if v.id == r.runId then listed = true end end
+                for _, v in ipairs(exports.whip_core:GetScenarioRuns({ tests = true }) or {}) do if v.id == r.runId then listedWithTests = true end end
+                assertFalse(listed, 'not in GetScenarioRuns')
                 assertTrue(listedWithTests, 'only when tests are asked for')
                 assertFalse((exports.whip_core:GetScenarioRun(r.runId)), 'not found by its id')
                 assertType(exports.whip_core:GetScenarioRun(r.runId, { tests = true }), 'table', 'found when tests are asked for')

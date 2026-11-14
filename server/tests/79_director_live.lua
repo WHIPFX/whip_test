@@ -3,7 +3,8 @@
 -- ============================================
 --
 -- A real run (not a Test) needs a scenario that is switched on and starts "From a script". whip_test registers one
--- of its own in code (RegisterDirectorScenario 'whip_test_live'): it waits until a Director admin accepts it, or
+-- of its own in code ('whip_test_live', with __RegisterDirectorScenario: the plumbing under Whip.scenario, called
+-- straight because setup needs the status it returns): it waits until a Director admin accepts it, or
 -- trusts whip_test, in /whip (Director > Shipped), and a person switches it on once there. Until then this module
 -- is skipped, saying so. Its cards only wait, branch and end: nothing is handed out or paid.
 --
@@ -38,7 +39,7 @@ RegisterTestModule({
     setup = function(source, ctx)
         local p = exports.whip_core:GetPlayer(source)
         if not (p and p.charId) then skip('the tester is not on a character') end
-        local status, why = exports.whip_core:RegisterDirectorScenario(KEY, liveDoc())
+        local status, why = exports.whip_core:__RegisterDirectorScenario(KEY, liveDoc())
         if status ~= 'accepted' then
             skip(('the scenario "%s" is %s: accept it (or trust whip_test) in /whip, Director > Shipped, and switch it on once'):format(
                 KEY, tostring(status or why)))
@@ -77,8 +78,8 @@ RegisterTestModule({
                 local view = exports.whip_core:GetScenarioRun(id)
                 assertType(view, 'table', 'GetScenarioRun finds it')
                 local listed = false
-                for _, v in ipairs(exports.whip_core:ListScenarioRuns({ scenario = KEY }) or {}) do if v.id == id then listed = true end end
-                assertTrue(listed, 'ListScenarioRuns lists it')
+                for _, v in ipairs(exports.whip_core:GetScenarioRuns({ scenario = KEY }) or {}) do if v.id == id then listed = true end end
+                assertTrue(listed, 'GetScenarioRuns lists it')
                 assertTrue(exports.whip_core:IsPlayerInScenarioRun(source, KEY), 'the tester is in it')
                 assertTrue(waitFor(function() return started[id] end, 3000) ~= nil, 'scripts heard run:started')
                 local again = exports.whip_core:StartScenarioRun(KEY, source)

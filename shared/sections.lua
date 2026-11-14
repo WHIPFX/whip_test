@@ -117,7 +117,7 @@ TestSections = {
         id = 'interaction', label = 'Interaction & UI', icon = '👆',
         desc = 'AddAction (prompts, wheel, car parts), placed and runtime points, NPCs, overrides, the UI library',
         modules = {
-            'Timed Actions', 'UI From The Server', 'Interaction Points', 'Runtime Points',
+            'UI From The Server', 'Interaction Points', 'Runtime Points',
             'Client: Interactions', 'Client: UI Library', 'Client: Dev Pages',
             'Client: Clean Screen', 'Client: Objectives',
         },

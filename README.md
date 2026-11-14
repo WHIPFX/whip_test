@@ -31,8 +31,8 @@ from the console when you want it (`ensure whip_test`).
 | `/testloadstop` | Stops a load test. Works from the server console. |
 | `/testloadclean` | Counts what a load test left behind, and deletes it only with `confirm`. |
 
-`/testpanel`, `/testpanelro`, `/dumpster`, `/lootcrate`, `/medkit`, `/evidence` and `/vendingmachine` open demo
-panels.
+`/testpanel`, `/testpanelro`, `/dumpster`, `/lootcrate`, `/medkit`, `/evidence`, `/vendingmachine`, `/toolbox`,
+`/dropoff`, `/safebox`, `/trashcan` and `/showcase` open demo panels.
 
 ## License
 

@@ -26,8 +26,8 @@
 
 local CORE = 'whip_core'
 
---- Exports whose absence from the type file is deliberate. Test seams (__Test*) are handled by
---- isTestSeam below; this is for anything else.
+--- Exports whose absence from the type file is deliberate. whip_core's internal names (__Test* seams,
+--- and the plumbing behind the Whip.* helpers) are handled by isInternal below; this is for anything else.
 local UNTYPED_ON_PURPOSE = {}
 
 --- Type stubs with no matching export, where that is deliberate.
@@ -107,7 +107,7 @@ local function expandGlob(glob)
     if okList and #paths > 0 then return paths, true end
 
     if dir:match('items$') then
-        for key in pairs(exports.whip_core:GetAllItemDefs() or {}) do
+        for key in pairs(exports.whip_core:GetItemDefs() or {}) do
             local path = dir .. '/' .. key .. '.lua'
             if LoadResourceFile(CORE, path) then paths[#paths + 1] = path end
         end
@@ -140,10 +140,10 @@ local function scriptFiles(kind)
 end
 
 --- Helpers in whip_core that call exports(name, ...) for the name they are given, so the export has no
---- exports('Name' line of its own: client/zones.lua's zoneSetter('ZoneSetCondition', fn) (review 8, 5 Oct
---- 2026). Without this the scan called the ten ZoneSet* / ZoneUpdate* stubs stale. A new helper of the
---- kind goes here.
-local EXPORT_HELPERS = { 'zoneSetter' }
+--- exports('Name' line of its own. None now: client/zones.lua's zoneSetter('ZoneSetCondition', fn) was one
+--- (review 8, 5 Oct 2026; without it the scan called the ten ZoneSet* / ZoneUpdate* stubs stale) until
+--- UpdateZone took those setters in on 14 Nov 2026. A new helper of the kind goes here.
+local EXPORT_HELPERS = {}
 
 --- Every `exports('Name', ...)` across whip_core's scripts of one side, with the parameter list
 --- when the export is an inline `function(...)`.
@@ -200,8 +200,11 @@ local function typedExports(file)
     return found
 end
 
-local function isTestSeam(name)
-    return name:sub(1, 6) == '__Test'
+--- whip_core's internal names, __Name: the __Test* seams, and (since 14 Nov 2026) the plumbing behind
+--- lib/satellite.lua's Whip.* helpers, such as __RegisterDirectorCard. Real exports, kept off the type files on
+--- purpose, as whip_core's own dev/stubcheck.lua skips them.
+local function isInternal(name)
+    return name:sub(1, 2) == '__'
 end
 
 --- Number of parameters in a list, or nil for a variadic one (which cannot be compared).
@@ -272,7 +275,7 @@ end
 local function compare(real, typed)
     local missing, stale = {}, {}
     for name in pairs(real) do
-        if typed[name] == nil and not isTestSeam(name) and not UNTYPED_ON_PURPOSE[name] then
+        if typed[name] == nil and not isInternal(name) and not UNTYPED_ON_PURPOSE[name] then
             missing[name] = true
         end
     end
@@ -409,21 +412,22 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'test seams stay out of the public type files',
+            name = 'test seams and the other internal names stay out of the public type files',
             fn = function()
                 -- The other direction of the same rule. __Test* exports are real and callable, and
                 -- they must never appear in the stubs a satellite developer reads — a seam that
-                -- fakes a database failure has no business being suggested by an editor.
+                -- fakes a database failure has no business being suggested by an editor. The same for
+                -- the helpers' plumbing (__RegisterDirectorCard and the rest): a resource uses Whip.card.
                 local leaked = {}
                 for _, file in ipairs({ 'types/server.lua', 'types/client.lua' }) do
                     for name in pairs(typedExports(file)) do
-                        if isTestSeam(name) then leaked[name] = true end
+                        if isInternal(name) then leaked[name] = true end
                     end
                 end
 
                 local list = sortedKeys(leaked)
                 assertEqual(#list, 0,
-                    'test seams leaked into the type files: ' .. table.concat(list, ', '))
+                    'internal names leaked into the type files: ' .. table.concat(list, ', '))
             end,
         },
     },

@@ -69,7 +69,7 @@ local function disposeJob(source, key)
     local accounts = exports.whip_core:GetJobBankAccounts(job.jobId) or {}
     for _, acc in ipairs(accounts) do
         if (tonumber(acc.balance) or 0) > 0 then
-            pcall(exports.whip_core.BankSystemWithdraw, exports.whip_core, acc.accountId, acc.balance, '_test cleanup')
+            pcall(exports.whip_core.BankSystemWithdraw, exports.whip_core, acc.accountId, acc.balance, { reason = '_test cleanup' })
         end
     end
     pcall(exports.whip_core.ClockOff, exports.whip_core, source, key)
@@ -974,13 +974,13 @@ RegisterTestModule({
                 ensureOwnedJob(source, ctx)
                 if not ctx.ownedAccountId then skip('the owned job has no business account') end
 
-                assertOk(exports.whip_core:BankSystemDeposit(ctx.ownedAccountId, 5, '_test float'), nil, 'money in')
+                assertOk(exports.whip_core:BankSystemDeposit(ctx.ownedAccountId, 5, { reason = '_test float' }), nil, 'money in')
                 local refused, why = exports.whip_core:DeleteJob(OWNED_KEY)
                 assertFalse(refused, 'refused while the account holds money')
                 assertEqual(why, WHY.moneyLeft, 'and says why')
                 assertNotNil(exports.whip_core:GetJob(OWNED_KEY), 'the job is still there')
 
-                assertOk(exports.whip_core:BankSystemWithdraw(ctx.ownedAccountId, 5, '_test float back'), nil, 'money out')
+                assertOk(exports.whip_core:BankSystemWithdraw(ctx.ownedAccountId, 5, { reason = '_test float back' }), nil, 'money out')
                 local mark = #_jobEvents
                 local ok, delWhy = exports.whip_core:DeleteJob(OWNED_KEY)
                 assertOk(ok, delWhy, 'DeleteJob')

@@ -392,10 +392,10 @@ RegisterTestModule({
         -- naming "GetItemDef returns known item" pointed at two different files, so the first
         -- move on seeing it red was to work out which one had actually failed.
         {
-            name = 'GetAllItemDefs returns table with entries',
+            name = 'GetItemDefs returns table with entries',
             fn = function()
-                local all = exports.whip_core:GetAllItemDefs()
-                assertType(all, 'table', 'GetAllItemDefs')
+                local all = exports.whip_core:GetItemDefs()
+                assertType(all, 'table', 'GetItemDefs')
                 assertNotNil(all.food, 'all.food')
             end,
         },

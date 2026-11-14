@@ -13,8 +13,8 @@
 --   * DeleteContainer used to delete a shop's stock container out from under it.
 --   * A catalog could carry fractional prices or the old `{ price = n }` shape. Both are stored as
 --     plain whole numbers now.
---   * SetVehicleData, SetVehicleDataMany and ClearAllVehicleData reported success when the row
---     write failed. They now report the failure and put the block back.
+--   * SetVehicleData (one key, or a table of several: SetVehicleDataMany until 14 Nov 2026) and
+--     ClearAllVehicleData reported success when the row write failed. They now report the failure and put the block back.
 -- ============================================
 
 local KEY   = '_test_audit2'
@@ -36,9 +36,9 @@ end
 
 --- Through whip_core, so the cache entry goes with the row. A raw `DELETE ... LIKE` left the shop in
 --- Shops.cache, where it kept its container linked and made DeleteContainer refuse the shelf.
---- (GetShopBy('key', ...) since 09-24, when GetShopByKey was removed.)
+--- (GetShop({ key = ... }) since 14 Nov 2026; GetShopBy('key', ...) from 09-24, when GetShopByKey was removed.)
 local function removeShopByKey(key)
-    local def = exports.whip_core:GetShopBy('key', key)
+    local def = exports.whip_core:GetShop({ key = key })
     if def and def.shopId then pcall(exports.whip_core.DeleteShop, exports.whip_core, def.shopId) end
 end
 
@@ -121,7 +121,7 @@ RegisterTestModule({
                 -- The CONTAINER is what the refusal protects. DeleteContainer never touches the
                 -- shop, so asserting the shop's link survived could not have failed; the container
                 -- itself, in memory and on disk, can.
-                assertNotNil(exports.whip_core:GetContainerDef(ctx.containerId), 'the container still exists')
+                assertNotNil(exports.whip_core:GetContainer(ctx.containerId), 'the container still exists')
                 assertDbRowCount('SELECT 1 FROM `containers` WHERE `containerId` = ?', { ctx.containerId }, 1,
                     'and so does its row')
             end,
@@ -213,7 +213,7 @@ RegisterTestModule({
                 assertTrue(exports.whip_core:SetVehicleData(ctx.vehicleId, 'base', 1), 'baseline value')
 
                 assertTrue(exports.whip_core:__TestSetDbFaultMode('vehicle_data'), 'fault armed')
-                local written, err = exports.whip_core:SetVehicleDataMany(ctx.vehicleId, { base = 2, extra = 3 })
+                local written, err = exports.whip_core:SetVehicleData(ctx.vehicleId, { base = 2, extra = 3 })
                 assertNil(exports.whip_core:__TestGetDbFaultMode(), 'the fault fired on that write')
 
                 assertFalse(written, 'nothing is reported written (false, since DX-19 — it was 0, which is true)')

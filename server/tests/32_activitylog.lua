@@ -149,7 +149,7 @@ RegisterTestModule({
         {
             name = 'The satellite export writes a player row, detail verbatim',
             fn = function(source, ctx)
-                local ok = exports.whip_core:LogActivity(source, 'test_event', 'from 32_activitylog')
+                local ok = exports.whip_core:LogActivity(source, 'test_event', { detail = 'from 32_activitylog' })
                 assertTrue(ok, 'plain export write accepted')
                 assertTrue(exports.whip_core:FlushActivityLog(), 'activity log flushed')
 
@@ -181,8 +181,8 @@ RegisterTestModule({
                 assertNil((exports.whip_core:GetItemAt(addr).metadata or {}).uid,
                     'precondition: the fixture has no uid yet')
 
-                assertTrue(exports.whip_core:LogActivity(source, 'test_event', 'first', addr), 'first call accepted')
-                assertTrue(exports.whip_core:LogActivity(source, 'test_event', 'second', addr), 'second call accepted')
+                assertTrue(exports.whip_core:LogActivity(source, 'test_event', { detail = 'first', slotData = addr }), 'first call accepted')
+                assertTrue(exports.whip_core:LogActivity(source, 'test_event', { detail = 'second', slotData = addr }), 'second call accepted')
 
                 local live = exports.whip_core:GetItemAt(addr)
                 local uid = live and live.metadata and live.metadata.uid
@@ -221,15 +221,15 @@ RegisterTestModule({
 
                 local addr = PocketAddr(source, 'player', S.slot)
                 local copy = exports.whip_core:GetItemAt(addr)
-                assertTrue(exports.whip_core:LogActivity(source, 'test_event', 'copy-no-uid', copy), 'accepted')
+                assertTrue(exports.whip_core:LogActivity(source, 'test_event', { detail = 'copy-no-uid', slotData = copy }), 'accepted')
                 local live = exports.whip_core:GetItemAt(addr)
                 assertNil(live.metadata and live.metadata.uid, 'nothing was minted onto the real item')
 
                 -- Give the real item a uid through the address form, then pass a fresh copy.
-                assertTrue(exports.whip_core:LogActivity(source, 'test_event', 'mint', addr), 'the address call minted')
+                assertTrue(exports.whip_core:LogActivity(source, 'test_event', { detail = 'mint', slotData = addr }), 'the address call minted')
                 local uid = exports.whip_core:GetItemAt(addr).metadata.uid
                 local copy2 = exports.whip_core:GetItemAt(addr)
-                assertTrue(exports.whip_core:LogActivity(source, 'test_event', 'copy-with-uid', copy2), 'accepted')
+                assertTrue(exports.whip_core:LogActivity(source, 'test_event', { detail = 'copy-with-uid', slotData = copy2 }), 'accepted')
 
                 assertTrue(exports.whip_core:FlushActivityLog(), 'activity log flushed')
                 local rows = DbQuery(
@@ -248,19 +248,19 @@ RegisterTestModule({
             name = 'An address that names nothing is refused',
             fn = function(source, ctx)
                 RemoveAllOf(source, ITEM)
-                local ok, err = exports.whip_core:LogActivity(source, 'test_event', 'x', PocketAddr(source, 'player', S.slot))
+                local ok, err = exports.whip_core:LogActivity(source, 'test_event', { detail = 'x', slotData = PocketAddr(source, 'player', S.slot) })
                 assertFalse(ok, 'empty slot refused')
                 assertEqual(err, 'Empty slot', 'with the reason')
-                ok, err = exports.whip_core:LogActivity(source, 'test_event', 'x', PocketAddr(source, 'nope', 1))
+                ok, err = exports.whip_core:LogActivity(source, 'test_event', { detail = 'x', slotData = PocketAddr(source, 'nope', 1) })
                 assertFalse(ok, 'unknown pocket refused')
                 assertTrue(type(err) == 'string' and err ~= '', ('with a reason (got %s)'):format(tostring(err)))
-                ok, err = exports.whip_core:LogActivity(source, 'test_event', 'x', PocketAddr(source, 'player', 0))
+                ok, err = exports.whip_core:LogActivity(source, 'test_event', { detail = 'x', slotData = PocketAddr(source, 'player', 0) })
                 assertFalse(ok, 'slot 0 refused')
                 assertEqual(err, 'slot must be a positive integer', 'with the reason')
 
                 -- The old `{ container, slot }` spelling is refused OUT LOUD (09-24), rather than
                 -- falling through and writing a row tied to no item.
-                ok, err = exports.whip_core:LogActivity(source, 'test_event', 'x', { container = 'player', slot = S.slot })
+                ok, err = exports.whip_core:LogActivity(source, 'test_event', { detail = 'x', slotData = { container = 'player', slot = S.slot } })
                 assertFalse(ok, 'the old { container, slot } form is refused')
                 assertTrue(type(err) == 'string' and err:find('address', 1, true) ~= nil,
                     ('with a reason that names the address form (got %s)'):format(tostring(err)))
@@ -307,7 +307,14 @@ RegisterTestModule({
 
                 local where, err = exports.whip_core:AddItem(source, ITEM, 2, nil, 'quest reward')
                 assertEqual(where, 'inventory', 'AddItem put it in the pockets: ' .. tostring(err))
-                assertTrue(exports.whip_core:RemoveItem(source, ITEM, 1, 'used up'), 'RemoveItem accepted')
+                -- RemoveItem's fourth argument is metadata, as AddItem's, and the reason is in opts (14 Nov 2026).
+                -- A reason where the metadata goes is the old shape: refused, saying so, and nothing taken.
+                local old, oldWhy = exports.whip_core:RemoveItem(source, ITEM, 1, 'used up')
+                assertFalse(old, 'a reason where the metadata goes is refused')
+                assertEqual(oldWhy, 'metadata is a table or nil: the reason goes in opts (RemoveItem(source, item, amount, nil, { reason = ... }))',
+                    'and says where the reason goes')
+                assertEqual(exports.whip_core:GetItemCount(source, ITEM), 2, 'nothing was taken')
+                assertTrue(exports.whip_core:RemoveItem(source, ITEM, 1, nil, { reason = 'used up' }), 'RemoveItem accepted')
                 local found = exports.whip_core:FindItem(source, ITEM)
                 assertNotNil(found, 'one left to take from its slot')
                 -- StoreTake from the slot FindItem names (09-24: RemoveItemFromSlot was removed, and
@@ -315,10 +322,15 @@ RegisterTestModule({
                 local taken, takeErr = exports.whip_core:StoreTake(found.addr, 1, { reason = 'handed in' })
                 assertOk(taken, takeErr, 'StoreTake accepted')
 
-                if not exports.whip_core:AddPlayerCash(source, 1, 'test wage') then
+                -- Cash through PayPlayer and ChargePlayer (AddPlayerCash and RemovePlayerCash until 14 Nov 2026).
+                -- PayPlayer drops a note that does not fit at the tester's feet, so room is asked first.
+                if not exports.whip_core:CanFitItem(source, 'cash', 1) then
                     skip('no room in your pockets for a banknote')
                 end
-                assertTrue(exports.whip_core:RemovePlayerCash(source, 1, 'test fee'), 'RemovePlayerCash accepted')
+                local paid, payWhy = exports.whip_core:PayPlayer(source, 1, { method = 'cash', reason = 'test wage' })
+                assertOk(paid, payWhy, 'PayPlayer accepted')
+                local receipt, chargeWhy = exports.whip_core:ChargePlayer(source, 1, { method = 'cash', reason = 'test fee' })
+                assertOk(receipt, chargeWhy, 'ChargePlayer accepted')
                 assertTrue(exports.whip_core:FlushActivityLog(), 'activity log flushed')
 
                 -- ONLY THE GAINS AND LOSSES (09-24). A take from one slot is written on that item's OWN

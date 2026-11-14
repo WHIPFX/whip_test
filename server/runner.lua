@@ -374,7 +374,7 @@ function DisposeTestAccount(accountId)
         -- pcall's own flag first, then the export's answer: a refused withdrawal answers
         -- `false, why` without throwing, and reading only pcall's flag took that for success.
         local called, drained, drainErr = pcall(exports.whip_core.BankSystemWithdraw, exports.whip_core,
-            accountId, acc.balance, '_test cleanup')
+            accountId, acc.balance, { reason = '_test cleanup' })
         if not called or not drained then
             print(('[whip_test] could not drain test account %s: %s')
                 :format(tostring(accountId), tostring(called and drainErr or drained)))
@@ -1731,7 +1731,7 @@ local enduranceSystems = {
             local where, addErr = exports.whip_core:AddItem(source, 'food', 3, nil,
                 { reason = '_endurance', noDrop = true })
             if not where then return false, 'AddItem failed: ' .. tostring(addErr) end
-            local ok2, remErr = exports.whip_core:RemoveItem(source, 'food', 3, '_endurance')
+            local ok2, remErr = exports.whip_core:RemoveItem(source, 'food', 3, nil, { reason = '_endurance' })
             if not ok2 then return false, 'RemoveItem failed: ' .. tostring(remErr) end
             return true
         end,
@@ -1757,14 +1757,14 @@ local enduranceSystems = {
             local player = exports.whip_core:GetPlayer(source)
             if not player then return false, 'GetPlayer nil' end
             if not _enduranceBankAccountId then
-                local acc = exports.whip_core:CreateBankAccount(source, '_endurance_account', 'personal')
+                local acc = exports.whip_core:CreateBankAccount(source, '_endurance_account', { type = 'personal' })
                 if not acc then return false, 'CreateBankAccount failed' end
                 _enduranceBankAccountId = acc.accountId
             end
             -- The actor is a person: `source` (whip's person rule, audit 3 DX-17).
-            local ok1 = exports.whip_core:BankDeposit(_enduranceBankAccountId, 100, source, '_endurance')
+            local ok1 = exports.whip_core:BankDeposit(_enduranceBankAccountId, 100, source, { reason = '_endurance' })
             if not ok1 then return false, 'BankDeposit failed' end
-            local ok2 = exports.whip_core:BankWithdraw(_enduranceBankAccountId, 100, source, '_endurance')
+            local ok2 = exports.whip_core:BankWithdraw(_enduranceBankAccountId, 100, source, { reason = '_endurance' })
             if not ok2 then return false, 'BankWithdraw failed' end
             return true
         end,
@@ -1792,10 +1792,10 @@ local enduranceSystems = {
                 x = pos.x + 1, y = pos.y, z = pos.z,
             })
             if not c then return false, 'CreateContainer failed' end
-            local def = exports.whip_core:GetContainerDef(c.containerId)
+            local def = exports.whip_core:GetContainer(c.containerId)
             if not def then
                 exports.whip_core:DeleteContainer(c.containerId)
-                return false, 'GetContainerDef nil'
+                return false, 'GetContainer nil'
             end
             exports.whip_core:DeleteContainer(c.containerId)
             return true
@@ -2151,12 +2151,14 @@ RegisterCommand('dropoff', function(source)
         onChange = function(ctx)
             if ctx.direction == 'in' then
                 local reward = math.random(10, 50)
-                -- The answer is read: cash never drops, so full pockets refuse the payment. The
-                -- item is still in the panel then, so they can take it back.
-                local paid, why = exports.whip_core:AddPlayerCash(ctx.source, reward, 'drop-off reward')
+                -- The answer is read: a refused payment leaves the item in the panel, so they can take
+                -- it back. Full pockets are not a refusal: PayPlayer puts the notes that do not fit at
+                -- their feet (AddPlayerCash, until 14 Nov 2026, refused them).
+                local paid, why = exports.whip_core:PayPlayer(ctx.source, reward, { method = 'cash', reason = 'drop-off reward' })
                 if paid then
+                    local where = paid.placement == 'ground' and ' (at your feet: your pockets are full)' or ''
                     exports.whip_core:NotifyPlayer(ctx.source,
-                        'Dropped off ' .. (ctx.item or '?') .. ' — earned $' .. reward, 'success')
+                        'Dropped off ' .. (ctx.item or '?') .. ' — earned $' .. reward .. where, 'success')
                 else
                     exports.whip_core:NotifyPlayer(ctx.source,
                         'Not paid: ' .. tostring(why) .. ' — take it back out', 'error')
@@ -2170,7 +2172,7 @@ RegisterCommand('dropoff', function(source)
         -- GetGameTimer()-suffixed event name that could never fire again, once per /dropoff.)
         onClose = function(ctx)
             for _, data in pairs(ctx.items or {}) do
-                exports.whip_core:LogActivity(ctx.source, 'destroyed', 'left at a drop-off point', data)
+                exports.whip_core:LogActivity(ctx.source, 'destroyed', { detail = 'left at a drop-off point', slotData = data })
             end
         end,
     })
@@ -2208,7 +2210,7 @@ RegisterCommand('trashcan', function(source)
             for _, data in pairs(ctx.items) do
                 destroyed = destroyed + (data.amount or 1)
                 -- Gone from the game, so logged as such (a copy: see /dropoff).
-                exports.whip_core:LogActivity(ctx.source, 'destroyed', 'thrown in a trash can', data)
+                exports.whip_core:LogActivity(ctx.source, 'destroyed', { detail = 'thrown in a trash can', slotData = data })
             end
             if destroyed > 0 then
                 exports.whip_core:NotifyPlayer(ctx.source,

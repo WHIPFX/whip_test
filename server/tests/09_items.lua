@@ -6,10 +6,10 @@ RegisterTestModule({
             RemoveAllOf(source, '_test_registered_item')
             RemoveAllOf(source, '_test_ctx_item')
         end
-        -- THE GENERATOR GOES TOO. RegisterItemDefaultMeta has no owner sweep, so the function this
+        -- THE GENERATOR GOES TOO. RegisterItemDefaultMetadata has no owner sweep, so the function this
         -- module installs stayed registered after the run — a reference into whip_test's Lua state,
         -- called for every '_test_registered_item' anyone creates. Registering nil removes it.
-        pcall(exports.whip_core.RegisterItemDefaultMeta, exports.whip_core, '_test_registered_item', nil)
+        pcall(exports.whip_core.RegisterItemDefaultMetadata, exports.whip_core, '_test_registered_item', nil)
     end,
     tests = {
         {
@@ -110,9 +110,9 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'RegisterItemDefaultMeta + AddItem produces metadata',
+            name = 'RegisterItemDefaultMetadata + AddItem produces metadata',
             fn = function(source)
-                exports.whip_core:RegisterItemDefaultMeta('_test_registered_item', function(itemKey)
+                exports.whip_core:RegisterItemDefaultMetadata('_test_registered_item', function(itemKey)
                     return { generated = true, ts = 12345 }
                 end)
                 -- (09-24: AddItem answers where it went, 'inventory' or 'ground', and a FindItem
@@ -178,10 +178,10 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'GetAllItemDefs includes registered item',
+            name = 'GetItemDefs includes registered item',
             fn = function()
-                local all = exports.whip_core:GetAllItemDefs()
-                assertNotNil(all['_test_registered_item'], 'registered item in GetAllItemDefs')
+                local all = exports.whip_core:GetItemDefs()
+                assertNotNil(all['_test_registered_item'], 'registered item in GetItemDefs')
             end,
         },
     }

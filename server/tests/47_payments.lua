@@ -38,12 +38,13 @@ RegisterTestModule({
         ctx.cashBefore = cash(source)
 
         -- Some cash to spend, whatever the tester was carrying.
-        assertTrue(exports.whip_core:AddPlayerCash(source, 100, '_test payments'), 'setup: $100 to spend')
+        local paid, payWhy = exports.whip_core:PayPlayer(source, 100, { method = 'cash', reason = '_test payments' })
+        assertEqual(paid and paid.placement, 'inventory', 'setup: $100 to spend, in the pockets (' .. tostring(payWhy) .. ')')
 
-        local acc, err = exports.whip_core:CreateBankAccount(source, '_test_payments', 'personal')
+        local acc, err = exports.whip_core:CreateBankAccount(source, '_test_payments', { type = 'personal' })
         if not acc then error('Setup failed: ' .. tostring(err)) end
         ctx.accountId = acc.accountId
-        local funded, fErr = exports.whip_core:BankSystemDeposit(acc.accountId, 1000, '_test_payments_fund')
+        local funded, fErr = exports.whip_core:BankSystemDeposit(acc.accountId, 1000, { reason = '_test_payments_fund' })
         if not funded then error('Setup failed to fund the account: ' .. tostring(fErr)) end
 
         exports.whip_core:RegisterItem(COIN, {
@@ -56,9 +57,9 @@ RegisterTestModule({
             -- Back to exactly what they had.
             local diff = cash(source) - (ctx.cashBefore or 0)
             if diff > 0 then
-                pcall(exports.whip_core.RemovePlayerCash, exports.whip_core, source, diff, '_test payments cleanup')
+                pcall(exports.whip_core.ChargePlayer, exports.whip_core, source, diff, { method = 'cash', reason = '_test payments cleanup' })
             elseif diff < 0 then
-                pcall(exports.whip_core.AddPlayerCash, exports.whip_core, source, -diff, '_test payments cleanup')
+                pcall(exports.whip_core.PayPlayer, exports.whip_core, source, -diff, { method = 'cash', reason = '_test payments cleanup' })
             end
             RemoveAllOf(source, COIN)
         end
@@ -163,7 +164,7 @@ RegisterTestModule({
 
                 -- More than they carry, with the account topped up to cover it.
                 local need = cash(source) + 50
-                assertOk(exports.whip_core:BankSystemDeposit(ctx.accountId, need, '_t47 auto topup'))
+                assertOk(exports.whip_core:BankSystemDeposit(ctx.accountId, need, { reason = '_t47 auto topup' }))
                 local b0 = balance(ctx.accountId)
                 local r2, err = exports.whip_core:ChargePlayer(source, need, { method = 'auto', accountId = ctx.accountId })
                 assertEqual(r2 and r2.method, 'bank', 'not enough cash: the bank (' .. tostring(err) .. ')')
@@ -220,10 +221,10 @@ RegisterTestModule({
                 ctx.strangerUserId = otherUser
 
                 -- A character who may be offline: { charId = n } (whip's person rule).
-                local acc, err = exports.whip_core:CreateBankAccount({ charId = other }, '_test_payments_view', 'personal')
+                local acc, err = exports.whip_core:CreateBankAccount({ charId = other }, '_test_payments_view', { type = 'personal' })
                 assertNotNil(acc, 'an account someone else owns: ' .. tostring(err))
                 ctx.otherAccountId = acc.accountId
-                assertOk(exports.whip_core:BankSystemDeposit(acc.accountId, 500, '_t47 view fund'))
+                assertOk(exports.whip_core:BankSystemDeposit(acc.accountId, 500, { reason = '_t47 view fund' }))
                 assertOk(exports.whip_core:GrantBankAccess(acc.accountId, source, 'view', { charId = other }))
 
                 local receipt, payErr = exports.whip_core:ChargePlayer(source, 50, { method = 'bank', accountId = acc.accountId })
@@ -237,26 +238,30 @@ RegisterTestModule({
             name = 'PayPlayer: cash to the player, bank to an account, an item currency as the item; bad input refused',
             fn = function(source, ctx)
                 local c0 = cash(source)
-                local ok, r = exports.whip_core:PayPlayer(source, 25, { reason = '_t47 pay' })
-                assertTrue(ok, 'auto pays an online player (' .. tostring(r) .. ')')
+                -- The result itself, or false and why, as ChargePlayer returns its receipt (14 Nov 2026: it was
+                -- `true, result`).
+                local r, why = exports.whip_core:PayPlayer(source, 25, { reason = '_t47 pay' })
+                assertType(r, 'table', 'auto pays an online player (' .. tostring(why) .. ')')
                 assertEqual(r.method, 'cash', 'in cash')
+                assertEqual(r.amount, 25, 'all of it')
                 assertEqual(cash(source), c0 + 25, 'and it arrived')
 
                 local b0 = balance(ctx.accountId)
-                ok, r = exports.whip_core:PayPlayer(source, 40, { method = 'bank', accountId = ctx.accountId, reason = '_t47 pay bank' })
-                assertTrue(ok, 'bank into a named account (' .. tostring(r) .. ')')
+                r, why = exports.whip_core:PayPlayer(source, 40, { method = 'bank', accountId = ctx.accountId, reason = '_t47 pay bank' })
+                assertType(r, 'table', 'bank into a named account (' .. tostring(why) .. ')')
                 assertEqual(r.accountId, ctx.accountId, 'that account')
                 assertEqual(balance(ctx.accountId), b0 + 40, 'and it arrived')
 
-                ok = exports.whip_core:PayPlayer({ charId = ctx.charId }, 0, { reason = '_t47 nothing' })
-                assertTrue(ok, '0 pays nothing and answers true')
+                r, why = exports.whip_core:PayPlayer({ charId = ctx.charId }, 0, { reason = '_t47 nothing' })
+                assertType(r, 'table', '0 pays nothing and still returns a result (' .. tostring(why) .. ')')
+                assertEqual(r.amount, 0, 'of nothing')
 
                 local coins0 = exports.whip_core:GetItemCount(source, COIN) or 0
-                ok, r = exports.whip_core:PayPlayer(source, 3, { currency = COIN, reason = '_t47 coins' })
-                assertTrue(ok, 'an item currency (' .. tostring(r) .. ')')
+                r, why = exports.whip_core:PayPlayer(source, 3, { currency = COIN, reason = '_t47 coins' })
+                assertType(r, 'table', 'an item currency (' .. tostring(why) .. ')')
                 local coins = exports.whip_core:GetItemCount(source, COIN) or 0
                 assertEqual(coins, coins0 + 3, 'paid as that item')
-                if coins > 0 then exports.whip_core:RemoveItem(source, COIN, coins, '_t47 coins back') end
+                if coins > 0 then exports.whip_core:RemoveItem(source, COIN, coins, nil, { reason = '_t47 coins back' }) end
 
                 local cases = {
                     { who = source, amount = -1,  opts = nil,                                  why = 'whole number' },
@@ -267,8 +272,8 @@ RegisterTestModule({
                     { who = 65000,  amount = 5,   opts = nil,                                  why = 'online' },
                 }
                 for i, c in ipairs(cases) do
-                    local okC, whyC = exports.whip_core:PayPlayer(c.who, c.amount, c.opts)
-                    assertFalse(okC, ('case %d is refused'):format(i))
+                    local resC, whyC = exports.whip_core:PayPlayer(c.who, c.amount, c.opts)
+                    assertFalse(resC, ('case %d is refused'):format(i))
                     assertTrue(type(whyC) == 'string' and whyC:find(c.why, 1, true) ~= nil,
                         ('case %d says "%s" (got: %s)'):format(i, c.why, tostring(whyC)))
                 end

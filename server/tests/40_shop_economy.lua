@@ -8,8 +8,8 @@
 --   * An `npc`/`infinite` shop sells from a CATALOG: a flat map of item key to price, with no
 --     stock. AddCatalogItem and RemoveCatalogItem edit it.
 --   * A `stocked` shop sells what is physically in a CONTAINER, and prices it per ITEM (12 Oct
---     2026; it was per shelf slot). SetShopItemPrice writes those; SetShopSlotPrice, from before,
---     prices the item on the slot it names.
+--     2026; it was per shelf slot). SetShopItemPrice writes those (SetShopSlotPrice, which priced
+--     the item on a slot it named, went on 14 Nov 2026).
 --
 -- The exports refuse across the models on purpose — GetShopPrices answers only for a stocked
 -- shop, AddCatalogItem only for the other two — and those refusals are the thing most likely to
@@ -76,7 +76,7 @@ end
 --- `DELETE ... LIKE` (what this used to be) removed the rows and left ghosts in Shops.cache —
 --- which then made DeleteContainer refuse the shelf, because a cached shop still pointed at it.
 local function removeShopByKey(key)
-    local def = exports.whip_core:GetShopBy('key', key)   -- GetShopByKey until 09-24
+    local def = exports.whip_core:GetShop({ key = key })   -- GetShopByKey until 09-24, then GetShopBy('key', ...)
     if def and def.shopId then pcall(exports.whip_core.DeleteShop, exports.whip_core, def.shopId) end
 end
 
@@ -270,21 +270,18 @@ RegisterTestModule({
         {
             name = 'One item has one price, whichever shelf slot it is on',
             fn = function(source, ctx)
-                -- Josh, 12 Oct 2026: "should be per item". Priced from one slot, the item costs the
-                -- same on every slot holding it; SetShopSlotPrice prices the ITEM on the slot.
+                -- Josh, 12 Oct 2026: "should be per item". Priced once, the item costs the same on
+                -- every slot holding it.
                 stockShelf(source, ctx, 1, 2)
                 stockShelf(source, ctx, 2, 2)
-                assertTrue(exports.whip_core:SetShopSlotPrice(ctx.containerId, 1, 100, true), 'priced from slot 1')
+                assertTrue(exports.whip_core:SetShopItemPrice(ctx.containerId, ITEM, 100, true), 'priced')
 
                 local prices = exports.whip_core:GetShopPrices(ctx.stockedShopId)
                 assertNotNil(prices, 'prices read back')
                 assertEqual(prices[ITEM] and prices[ITEM].price, 100, 'the item\'s price')
                 local stock = exports.whip_core:GetShopStock(ctx.stockedShopId) or {}
+                assertEqual(stock[1] and stock[1].price, 100, 'slot 1 sells it at that price')
                 assertEqual(stock[2] and stock[2].price, 100, 'and slot 2 sells it at the same')
-
-                local ok, why = exports.whip_core:SetShopSlotPrice(ctx.containerId, 9, 10, true)
-                assertFalse(ok, 'an empty slot has nothing to price')
-                assertEqual(why, 'That shelf slot is empty', 'and says so')
             end,
         },
         {
@@ -326,13 +323,6 @@ RegisterTestModule({
                 assertEqual(after and tonumber(after.price), before and tonumber(before.price),
                     'the bad prices wrote nothing over the real one')
                 assertNil(priceOnDisk(cid, '_test_no_such_item'), 'and no row for the unknown item')
-
-                -- The slot export's own refusals: a slot the shelf does not have.
-                for _, slot in ipairs({ 0, 1.5, SHELF_SLOTS + 1 }) do
-                    local ok, why = exports.whip_core:SetShopSlotPrice(cid, slot, 10, true)
-                    assertFalse(ok, 'slot ' .. tostring(slot) .. ' is refused')
-                    assertEqual(why, 'Invalid slot', 'slot ' .. tostring(slot) .. ': with the reason')
-                end
             end,
         },
         {
@@ -395,7 +385,7 @@ RegisterTestModule({
                     { kind = 'player', id = source, sub = 'player', slot = pocket },
                     { kind = 'container', id = ctx.containerId, slot = SHELF })
                 assertTrue(moved, 'stock moved onto the shelf: ' .. tostring(moveErr))
-                assertTrue(exports.whip_core:SetShopSlotPrice(ctx.containerId, SHELF, 55, true), 'shelf priced')
+                assertTrue(exports.whip_core:SetShopItemPrice(ctx.containerId, ITEM, 55, true), 'its item priced')
 
                 local stock, err = exports.whip_core:GetShopStock(ctx.stockedShopId)
                 assertOk(stock, err, 'stock reads back')
@@ -497,14 +487,15 @@ RegisterTestModule({
         -- Lookups
         -- ==========================================
         {
-            -- GetShopBy('containerId', c) since 09-24 (GetShopByContainerId was removed).
-            name = "GetShopBy('containerId') finds the shop that owns a container",
+            -- GetShop({ containerId = c }) since 14 Nov 2026: it was GetShopBy('containerId', c), and
+            -- GetShopByContainerId before 09-24.
+            name = 'GetShop({ containerId }) finds the shop that owns a container',
             fn = function(source, ctx)
-                local def = exports.whip_core:GetShopBy('containerId', ctx.containerId)
+                local def = exports.whip_core:GetShop({ containerId = ctx.containerId })
                 assertNotNil(def, 'the shop was found by its container')
                 assertEqual(def.shopId, ctx.stockedShopId, 'and it is the right one')
 
-                assertNil(exports.whip_core:GetShopBy('containerId', 987654),
+                assertNil(exports.whip_core:GetShop({ containerId = 987654 }),
                     'a container no shop owns answers nil')
             end,
         },

@@ -101,11 +101,11 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'GetContainerDef returns correct data',
+            name = 'GetContainer returns correct data',
             fn = function()
                 assertNotNil(_testContainerId, 'containerId from create')
-                local c = exports.whip_core:GetContainerDef(_testContainerId)
-                assertNotNil(c, 'GetContainerDef')
+                local c = exports.whip_core:GetContainer(_testContainerId)
+                assertNotNil(c, 'GetContainer')
                 assertEqual(c.containerId, _testContainerId, 'containerId match')
                 assertEqual(c.slots, 10, 'slots')
             end,
@@ -117,7 +117,7 @@ RegisterTestModule({
                 -- `true` or `false, reason` since 09-24 (it was a bare false); the reason is in the label.
                 local ok, err = exports.whip_core:UpdateContainer(_testContainerId, { name = '_test_stash_renamed' })
                 assertTrue(ok, 'UpdateContainer: ' .. tostring(err))
-                assertEqual(exports.whip_core:GetContainerDef(_testContainerId).name, '_test_stash_renamed',
+                assertEqual(exports.whip_core:GetContainer(_testContainerId).name, '_test_stash_renamed',
                     'renamed in memory')
                 assertDbScalar('SELECT `name` FROM `containers` WHERE `containerId` = ?', { _testContainerId },
                     '_test_stash_renamed', 'and on disk')
@@ -135,7 +135,7 @@ RegisterTestModule({
             name = 'A container update whose write fails changes nothing',
             fn = function()
                 assertNotNil(_testContainerId, 'containerId from create')
-                local before = exports.whip_core:GetContainerDef(_testContainerId).name
+                local before = exports.whip_core:GetContainer(_testContainerId).name
 
                 assertTrue(exports.whip_core:__TestFailNextQuery('UPDATE `containers`'), 'fault armed')
                 local ok, err = exports.whip_core:UpdateContainer(_testContainerId, { name = '_test_should_not_stick' })
@@ -148,7 +148,7 @@ RegisterTestModule({
                 -- The reason crosses the export since 09-24, as UpdateShop's does (08_shops).
                 assertEqual(err, DB_ERROR, 'with its reason')
 
-                assertEqual(exports.whip_core:GetContainerDef(_testContainerId).name, before,
+                assertEqual(exports.whip_core:GetContainer(_testContainerId).name, before,
                     'the name is unchanged in memory')
                 assertDbScalar('SELECT `name` FROM `containers` WHERE `containerId` = ?', { _testContainerId },
                     before, 'and on disk')
@@ -388,7 +388,7 @@ RegisterTestModule({
             name = 'EnsureContainer makes once, then finds the same one, by key',
             fn = function(source, ctx)
                 -- A leftover from a run that died before its teardown.
-                local stale = exports.whip_core:GetContainerBy('key', '_test:ensured')
+                local stale = exports.whip_core:GetContainer({ key = '_test:ensured' })
                 if stale then exports.whip_core:DeleteContainer(stale.containerId) end
 
                 local decl = { name = '_test_ensured', slots = 10, maxWeight = 50.0, x = 0, y = 0, z = 50 }
@@ -402,8 +402,8 @@ RegisterTestModule({
                 local b, bErr = exports.whip_core:EnsureContainer('_test:ensured', decl)
                 assertOk(b, bErr, 'EnsureContainer again')
                 assertEqual(b.containerId, a.containerId, 'the same container, not a twin')
-                assertEqual(exports.whip_core:GetContainerBy('key', '_test:ensured').containerId, a.containerId,
-                    "GetContainerBy('key') finds it")
+                assertEqual(exports.whip_core:GetContainer({ key = '_test:ensured' }).containerId, a.containerId,
+                    'GetContainer({ key }) finds it')
                 assertDbRowCount("SELECT 1 FROM `containers` WHERE `key` = '_test:ensured'", {}, 1, 'one row')
 
                 local bad = exports.whip_core:EnsureContainer('has spaces', decl)
@@ -416,12 +416,12 @@ RegisterTestModule({
                 assertNotNil(ctx.ensuredId, 'the ensured container exists')
                 local decl = { name = '_test_ensured', slots = 12, maxWeight = 50.0, x = 0, y = 0, z = 50 }
                 assertOk(exports.whip_core:EnsureContainer('_test:ensured', decl))
-                assertEqual(exports.whip_core:GetContainerDef(ctx.ensuredId).slots, 12, 'the new size followed the code')
+                assertEqual(exports.whip_core:GetContainer(ctx.ensuredId).slots, 12, 'the new size followed the code')
 
                 local renamed, rErr = exports.whip_core:UpdateContainer(ctx.ensuredId, { name = '_test_admin_name' })
                 assertOk(renamed, rErr, 'an admin edit')
                 assertOk(exports.whip_core:EnsureContainer('_test:ensured', decl))
-                assertEqual(exports.whip_core:GetContainerDef(ctx.ensuredId).name, '_test_admin_name',
+                assertEqual(exports.whip_core:GetContainer(ctx.ensuredId).name, '_test_admin_name',
                     'the same declaration leaves the edit alone')
             end,
         },
@@ -437,11 +437,11 @@ RegisterTestModule({
                 local shrunk, why = exports.whip_core:EnsureContainer('_test:ensured', decl)
                 assertFalse(shrunk, 'refused while slot 12 holds food')
                 assertNotNil(why, 'with a reason')
-                assertEqual(exports.whip_core:GetContainerDef(ctx.ensuredId).slots, 12, 'still 12 slots')
+                assertEqual(exports.whip_core:GetContainer(ctx.ensuredId).slots, 12, 'still 12 slots')
 
                 assertOk(exports.whip_core:StoreTake(at12, 1))
                 assertOk(exports.whip_core:EnsureContainer('_test:ensured', decl))
-                assertEqual(exports.whip_core:GetContainerDef(ctx.ensuredId).slots, 10, 'and 10 once it is empty')
+                assertEqual(exports.whip_core:GetContainer(ctx.ensuredId).slots, 10, 'and 10 once it is empty')
                 assertDbScalar('SELECT `slots` FROM `containers` WHERE `containerId` = ?', { ctx.ensuredId },
                     10, 'on disk')
             end,
@@ -462,7 +462,7 @@ RegisterTestModule({
                 end
 
                 assertOk(exports.whip_core:EnsureContainer('_test:ensured', with({ jobs = '_test_nojob', onDuty = true })))
-                local req = exports.whip_core:GetContainerDef(ctx.ensuredId).requirements
+                local req = exports.whip_core:GetContainer(ctx.ensuredId).requirements
                 assertEqual(req and req.jobs and req.jobs[1], '_test_nojob', 'stored in the one shape (jobs a list)')
                 assertDbRowCount('SELECT 1 FROM `containers` WHERE `containerId` = ? AND `requirements` IS NOT NULL',
                     { ctx.ensuredId }, 1, 'on disk')
@@ -480,7 +480,7 @@ RegisterTestModule({
                 assertFalse(picked, 'lockpick is a door\'s, refused on a container')
 
                 assertOk(exports.whip_core:EnsureContainer('_test:ensured', base))
-                assertNil(exports.whip_core:GetContainerDef(ctx.ensuredId).requirements,
+                assertNil(exports.whip_core:GetContainer(ctx.ensuredId).requirements,
                     'declared no more, so cleared')
                 local reopened, reWhy = exports.whip_core:OpenStore(source, addr, { skipDistance = true })
                 assertOk(reopened, reWhy, 'and anyone may open it again')
@@ -504,7 +504,7 @@ RegisterTestModule({
                 local made, why = exports.whip_core:CreateContainer(with({ items = 'food' }))
                 assertOk(made, why, 'a container that wants an item carried (food, as its keycard)')
                 ctx.cardLockerId = made.containerId
-                local req = exports.whip_core:GetContainerDef(made.containerId).requirements
+                local req = exports.whip_core:GetContainer(made.containerId).requirements
                 assertTrue(req and req.items and req.items[1] and req.items[1].key == 'food', 'stored in the doors\' shape')
 
                 local slot, giveWhy = exports.whip_core:StoreGive({ kind = 'container', id = made.containerId }, 'food', 1)
@@ -539,7 +539,7 @@ RegisterTestModule({
                 end
                 local made, why = exports.whip_core:CreateContainer(with({ job = 'police', onDuty = true }))
                 assertOk(made, why, 'one rule: a job on duty')
-                local req = exports.whip_core:GetContainerDef(made.containerId).requirements
+                local req = exports.whip_core:GetContainer(made.containerId).requirements
                 pcall(exports.whip_core.DeleteContainer, exports.whip_core, made.containerId)
                 assertTrue(req and req.jobs and req.jobs[1] == 'police' and req.onDuty == true,
                     'stored as requirements = { jobs = police, onDuty }')
@@ -576,7 +576,7 @@ RegisterTestModule({
 
                 local okR, n = exports.whip_core:ReleaseTag(tag)
                 assertTrue(okR == true and (tonumber(n) or 0) >= 1, 'ReleaseTag counts it')
-                assertNil(exports.whip_core:GetContainerDef(made.containerId), 'and it is gone')
+                assertNil(exports.whip_core:GetContainer(made.containerId), 'and it is gone')
                 ctx.runBoxId = nil
 
                 local again, aWhy = exports.whip_core:CreateContainer({ persist = false, tag = tag, x = 0, y = 0, z = 50 })
@@ -613,10 +613,10 @@ RegisterTestModule({
                 assertOk(exports.whip_core:__TestRunCharacterDeleted(ghost))
 
                 assertTrue(waitFor(function()
-                    local d = exports.whip_core:GetContainerDef(c.containerId)
+                    local d = exports.whip_core:GetContainer(c.containerId)
                     return d ~= nil and d.accessCharId == nil
                 end, 3000) == true, 'the one-person lock is gone')
-                assertNil(exports.whip_core:GetContainerDef(c.containerId).ownerCharId, 'and the owner')
+                assertNil(exports.whip_core:GetContainer(c.containerId).ownerCharId, 'and the owner')
                 local read = exports.whip_core:StoreRead({ kind = 'container', id = c.containerId })
                 assertEqual(read and read.items[1] and read.items[1].amount, 2, 'what was in it stayed')
                 assertDbRowCount('SELECT 1 FROM `containers` WHERE `containerId` = ? AND `ownerCharId` IS NULL AND `accessCharId` IS NULL',
@@ -648,7 +648,7 @@ RegisterTestModule({
                 TriggerEvent('whip_core:character:deleted', { charId = alive })
                 Wait(500)
 
-                local d = exports.whip_core:GetContainerDef(c.containerId)
+                local d = exports.whip_core:GetContainer(c.containerId)
                 assertEqual(d and d.ownerCharId, alive, 'still theirs')
                 assertEqual(d and d.accessCharId, alive, 'and still locked to them')
 
@@ -674,7 +674,7 @@ RegisterTestModule({
 
                 local ok, err = exports.whip_core:DeleteContainer(_testContainerId)
                 assertOk(ok, err, 'DeleteContainer')
-                assertNil(exports.whip_core:GetContainerDef(_testContainerId), 'container deleted from cache')
+                assertNil(exports.whip_core:GetContainer(_testContainerId), 'container deleted from cache')
                 assertDbRowCount('SELECT 1 FROM `containers` WHERE `containerId` = ?',
                     { _testContainerId }, 0, 'the containers row is gone')
                 assertDbRowCount('SELECT 1 FROM `container_inventory` WHERE `containerId` = ?',
@@ -683,9 +683,9 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'GetContainerDef returns nil for invalid ID',
+            name = 'GetContainer returns nil for invalid ID',
             fn = function()
-                assertNil(exports.whip_core:GetContainerDef(999999), 'invalid containerId')
+                assertNil(exports.whip_core:GetContainer(999999), 'invalid containerId')
             end,
         },
     }

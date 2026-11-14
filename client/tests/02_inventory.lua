@@ -25,15 +25,15 @@ RegisterClientTestModule({
             end,
         },
         {
-            name = 'GetItemDef returns known item, and GetAllItemDefs holds the same one',
+            name = 'GetItemDef returns known item, and GetItemDefs holds the same one',
             fn = function()
                 local def = exports.whip_core:GetItemDef('food')
                 assertNotNil(def, 'GetItemDef food')
                 assertType(def.name, 'string', 'name type')
 
                 -- Was its own test. Both read Config.Items, so the useful claim is that they agree.
-                local all = exports.whip_core:GetAllItemDefs()
-                assertType(all, 'table', 'GetAllItemDefs')
+                local all = exports.whip_core:GetItemDefs()
+                assertType(all, 'table', 'GetItemDefs')
                 assertNotNil(all.food, 'has food')
                 assertEqual(all.food.name, def.name, 'both exports describe the same item')
 

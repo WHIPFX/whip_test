@@ -22,7 +22,7 @@ RegisterTestModule({
             pcall(exports.whip_core.DeleteShop, exports.whip_core, ctx.shopId)
         end
         -- The delete test's own shop, if that test failed before (or during) its delete.
-        local temp = exports.whip_core:GetShopBy('key', '_test_shop_del')
+        local temp = exports.whip_core:GetShop({ key = '_test_shop_del' })
         if temp then pcall(exports.whip_core.DeleteShop, exports.whip_core, temp.shopId) end
     end,
     tests = {
@@ -47,24 +47,24 @@ RegisterTestModule({
             end,
         },
         {
-            -- GetShopBy('key', k) since 09-24 (GetShopByKey was removed).
-            name = "GetShopBy('key') finds by key",
+            -- GetShop({ key = k }) since 14 Nov 2026: it was GetShopBy('key', k), and GetShopByKey before 09-24.
+            name = 'GetShop({ key }) finds by key',
             fn = function(source, ctx)
-                local shop = exports.whip_core:GetShopBy('key', '_test_shop')
-                assertNotNil(shop, "GetShopBy('key')")
+                local shop = exports.whip_core:GetShop({ key = '_test_shop' })
+                assertNotNil(shop, 'GetShop({ key })')
                 assertEqual(shop.shopId, ctx.shopId, 'shopId')
             end,
         },
         {
-            name = 'GetAllShops includes test shop',
+            name = 'GetShops includes test shop',
             fn = function(source, ctx)
-                local all = exports.whip_core:GetAllShops()
-                assertType(all, 'table', 'GetAllShops')
+                local all = exports.whip_core:GetShops()
+                assertType(all, 'table', 'GetShops')
                 local found = false
                 for _, s in ipairs(all) do
                     if s.shopId == ctx.shopId then found = true; break end
                 end
-                assertTrue(found, 'test shop in GetAllShops')
+                assertTrue(found, 'test shop in GetShops')
             end,
         },
         {
@@ -168,11 +168,12 @@ RegisterTestModule({
             end,
         },
         {
-            -- GetShopBy('job', j) since 09-24 (GetShopsByJob was removed). 'job' answers a LIST.
-            name = "GetShopBy('job') returns empty for no job",
+            -- GetShops({ job = j }) since 14 Nov 2026: it was GetShopBy('job', j), and GetShopsByJob before
+            -- 09-24. A job's shops are a LIST.
+            name = 'GetShops({ job }) returns empty for no job',
             fn = function(source, ctx)
-                local shops = exports.whip_core:GetShopBy('job', 999999)
-                assertType(shops, 'table', "GetShopBy('job') type")
+                local shops = exports.whip_core:GetShops({ job = 999999 })
+                assertType(shops, 'table', 'GetShops({ job }) type')
                 assertEqual(#shops, 0, 'no shops for fake job')
             end,
         },
@@ -181,24 +182,24 @@ RegisterTestModule({
             -- "not mentioned") — before that existed, the panel sent 0, the id sanitiser turned it
             -- into nil, and a shop could never be unlinked from a job while the panel said
             -- "updated".
-            name = "GetShopBy('job') finds a linked shop, and UpdateShop(false) unlinks it",
+            name = 'GetShops({ job }) finds a linked shop, and UpdateShop(false) unlinks it',
             fn = function(source, ctx)
                 assertNotNil(ctx.jobId, 'setup found or made a job to link to')
 
                 local linked, lErr = exports.whip_core:UpdateShop(ctx.shopId, { jobId = ctx.jobId })
                 assertOk(linked, lErr, 'linked to the job')
                 local found = false
-                for _, s in ipairs(exports.whip_core:GetShopBy('job', ctx.jobId) or {}) do
+                for _, s in ipairs(exports.whip_core:GetShops({ job = ctx.jobId }) or {}) do
                     if s.shopId == ctx.shopId then found = true break end
                 end
-                assertTrue(found, "GetShopBy('job') lists it")
+                assertTrue(found, 'GetShops({ job }) lists it')
                 assertDbScalar('SELECT `jobId` FROM `shops` WHERE `shopId` = ?', { ctx.shopId }, ctx.jobId,
                     'the link is on disk')
 
                 local cleared, cErr = exports.whip_core:UpdateShop(ctx.shopId, { jobId = false })
                 assertOk(cleared, cErr, 'unlinked')
                 assertNil(exports.whip_core:GetShop(ctx.shopId).jobId, 'no job in memory')
-                for _, s in ipairs(exports.whip_core:GetShopBy('job', ctx.jobId) or {}) do
+                for _, s in ipairs(exports.whip_core:GetShops({ job = ctx.jobId }) or {}) do
                     assertNotEqual(s.shopId, ctx.shopId, 'no longer listed under the job')
                 end
                 assertDbRowCount('SELECT 1 FROM `shops` WHERE `shopId` = ? AND `jobId` IS NULL', { ctx.shopId }, 1,
@@ -218,7 +219,7 @@ RegisterTestModule({
                 assertFalse(ok, 'the delete reports failure')
                 assertEqual(err, DB_ERROR, 'with its reason')
                 assertNotNil(exports.whip_core:GetShop(ctx.shopId), 'still in memory')
-                assertNotNil(exports.whip_core:GetShopBy('key', '_test_shop'), 'still reachable by key')
+                assertNotNil(exports.whip_core:GetShop({ key = '_test_shop' }), 'still reachable by key')
                 assertDbRowCount('SELECT 1 FROM `shops` WHERE `shopId` = ?', { ctx.shopId }, 1, 'and on disk')
             end,
         },
@@ -230,7 +231,7 @@ RegisterTestModule({
                 assertOk(temp, tempErr, 'create temp shop')
                 local ok, err = exports.whip_core:DeleteShop(temp.shopId)
                 assertOk(ok, err, 'DeleteShop')
-                assertNil(exports.whip_core:GetShopBy('key', '_test_shop_del'), 'deleted shop should be nil')
+                assertNil(exports.whip_core:GetShop({ key = '_test_shop_del' }), 'deleted shop should be nil')
                 assertNil(exports.whip_core:GetShop(temp.shopId), 'and gone by id')
                 assertDbRowCount('SELECT 1 FROM `shops` WHERE `shopId` = ?', { temp.shopId }, 0,
                     'the row is gone from disk')

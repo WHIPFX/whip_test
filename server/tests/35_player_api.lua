@@ -13,8 +13,9 @@
 --
 -- CASH IS THE REASON THIS IS NEAR THE TOP OF THE LIST
 --
--- Cash is not a column. It is the `cash` item counted across the player's containers, so
--- AddPlayerCash and RemovePlayerCash are inventory writes — and they persist through
+-- Cash is not a column. It is the `cash` item counted across the player's containers, so paying
+-- it (PayPlayer) and taking it (ChargePlayer) with method = 'cash' are inventory writes (they were
+-- AddPlayerCash and RemovePlayerCash until 14 Nov 2026) — and they persist through
 -- `Inventory.save`, the pre-stores path that fourteen call sites still use. That path had to be
 -- taught about transaction groups, because adding cash to somebody who was half-way through a
 -- deferred transfer would otherwise write their side of it alone and duplicate the item. So
@@ -25,6 +26,19 @@
 -- ============================================
 
 local META_KEY = '_test_player_api'
+
+--- Always in cash: PayPlayer and ChargePlayer would otherwise pick the method themselves ('auto').
+local CASH = { method = 'cash', reason = '_test player api' }
+
+--- PayPlayer in cash, staged only where the notes fit: full pockets drop them at the tester's feet
+--- (placement 'ground'), where neither the balance nor a put-back can see them. Skipped then, as
+--- the old AddPlayerCash refused.
+local function payCash(source, amount)
+    if not exports.whip_core:CanFitItem(source, 'cash', amount) then
+        skip(('no room in the pockets for $%d — inventory full?'):format(amount))
+    end
+    return exports.whip_core:PayPlayer(source, amount, CASH)
+end
 
 --- Cash on DISK for this character, summed across containers. Cash can occupy several slots,
 --- so a single-slot read would pass or fail on how the stack happened to land.
@@ -61,9 +75,9 @@ RegisterTestModule({
         if ctx and ctx.startCash and source then
             local now = exports.whip_core:GetPlayerCash(source)
             if now > ctx.startCash then
-                pcall(exports.whip_core.RemovePlayerCash, exports.whip_core, source, now - ctx.startCash)
+                pcall(exports.whip_core.ChargePlayer, exports.whip_core, source, now - ctx.startCash, CASH)
             elseif now < ctx.startCash then
-                pcall(exports.whip_core.AddPlayerCash, exports.whip_core, source, ctx.startCash - now)
+                pcall(exports.whip_core.PayPlayer, exports.whip_core, source, ctx.startCash - now, CASH)
             end
         end
         if source then
@@ -100,91 +114,103 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'AddPlayerCash raises the balance, and it reaches disk',
+            name = 'PayPlayer in cash raises the balance, and it reaches disk',
             fn = function(source, ctx)
                 local before = exports.whip_core:GetPlayerCash(source)
 
-                local added = exports.whip_core:AddPlayerCash(source, 250)
+                local paid, why = payCash(source, 250)
                 local after = exports.whip_core:GetPlayerCash(source)
 
                 -- Measured, then put back, then judged — a raise below must not strand the money.
-                if added then pcall(exports.whip_core.RemovePlayerCash, exports.whip_core, source, 250) end
+                if paid then pcall(exports.whip_core.ChargePlayer, exports.whip_core, source, 250, CASH) end
 
-                assertTrue(added, 'AddPlayerCash reported success')
-                assertEqual(after, before + 250, 'the balance rose by exactly the amount added')
+                assertType(paid, 'table', 'PayPlayer returned its result: ' .. tostring(why))
+                assertEqual(paid.placement, 'inventory', 'the notes went into the pockets')
+                assertEqual(after, before + 250, 'the balance rose by exactly the amount paid')
                 assertEqual(exports.whip_core:GetPlayerCash(source), before,
                     'and the restore put it back')
             end,
         },
         {
-            name = 'Added cash is DURABLE — it survives to the database',
+            name = 'Paid cash is DURABLE — it survives to the database',
             fn = function(source, ctx)
-                -- AddPlayerCash persists through the player store, flushed immediately (it used to
+                -- PayPlayer's cash persists through the player store, flushed immediately (it used to
                 -- be Inventory.save, the pre-stores path). Asserting only the in-memory balance
                 -- would pass even if that write never happened, and the money would vanish on the
                 -- next restart.
                 local beforeDisk = cashOnDisk(ctx.charId)
 
-                local added = exports.whip_core:AddPlayerCash(source, 300)
+                local paid, why = payCash(source, 300)
                 FlushPersistence(source)
                 local afterDisk = cashOnDisk(ctx.charId)
 
-                if added then
-                    pcall(exports.whip_core.RemovePlayerCash, exports.whip_core, source, 300)
+                if paid then
+                    pcall(exports.whip_core.ChargePlayer, exports.whip_core, source, 300, CASH)
                     FlushPersistence(source)
                 end
 
-                assertTrue(added, 'AddPlayerCash reported success')
+                assertType(paid, 'table', 'PayPlayer returned its result: ' .. tostring(why))
                 assertEqual(afterDisk, beforeDisk + 300,
-                    'the database shows the added cash, not just the cache')
+                    'the database shows the paid cash, not just the cache')
                 assertEqual(cashOnDisk(ctx.charId), beforeDisk,
                     'and the restore reached disk too')
             end,
         },
         {
-            name = 'RemovePlayerCash lowers the balance by exactly the amount',
+            name = 'ChargePlayer in cash lowers the balance by exactly the amount',
             fn = function(source, ctx)
-                local added = exports.whip_core:AddPlayerCash(source, 500)
-                if not added then skip('could not stage cash — inventory full?') end
+                local paid = payCash(source, 500)
+                if not paid then skip('could not stage cash — inventory full?') end
 
                 local before  = exports.whip_core:GetPlayerCash(source)
-                local removed = exports.whip_core:RemovePlayerCash(source, 200)
+                local receipt, why = exports.whip_core:ChargePlayer(source, 200, CASH)
                 local after   = exports.whip_core:GetPlayerCash(source)
 
                 -- Whatever is left of the staged 500 goes back.
                 local staged = after - (before - 500)
                 if staged > 0 then
-                    pcall(exports.whip_core.RemovePlayerCash, exports.whip_core, source, staged)
+                    pcall(exports.whip_core.ChargePlayer, exports.whip_core, source, staged, CASH)
                 end
 
-                assertTrue(removed, 'RemovePlayerCash reported success')
-                assertEqual(after, before - 200, 'the balance fell by exactly the amount removed')
+                assertType(receipt, 'table', 'ChargePlayer returned a receipt: ' .. tostring(why))
+                assertEqual(receipt.method, 'cash', 'taken in cash')
+                assertEqual(after, before - 200, 'the balance fell by exactly the amount charged')
             end,
         },
         {
-            name = 'RemovePlayerCash REFUSES more than they hold, and takes nothing',
+            name = 'ChargePlayer in cash REFUSES more than they hold, and takes nothing',
             fn = function(source, ctx)
-                -- The half that matters. A remove that reports failure but has already taken
+                -- The half that matters. A charge that reports failure but has already taken
                 -- part of the money is how a failed purchase costs the player anyway.
                 local before  = exports.whip_core:GetPlayerCash(source)
-                local removed = exports.whip_core:RemovePlayerCash(source, before + 1000000)
+                local receipt = exports.whip_core:ChargePlayer(source, before + 1000000, CASH)
                 local after   = exports.whip_core:GetPlayerCash(source)
 
-                assertFalse(removed, 'taking more than they hold is refused')
+                assertFalse(receipt, 'taking more than they hold is refused')
                 assertEqual(after, before, 'and the balance is untouched — refused, not partly taken')
             end,
         },
         {
-            name = 'Zero and negative amounts are refused by both cash exports',
+            name = 'Negative amounts are refused by both cash calls; 0 moves nothing',
             fn = function(source, ctx)
-                -- A negative "add" that fell through to the remove path would be a free way to
-                -- delete someone's money, and a negative "remove" a free way to mint it.
+                -- A negative "pay" that fell through to the charge path would be a free way to
+                -- delete someone's money, and a negative "charge" a free way to mint it.
+                --
+                -- 0 is not refused: PayPlayer and ChargePlayer take it as "nothing to pay" and still
+                -- answer (a free thing needs no special case). AddPlayerCash and RemovePlayerCash, which
+                -- these replaced on 14 Nov 2026, refused it.
                 local before = exports.whip_core:GetPlayerCash(source)
 
-                assertFalse(exports.whip_core:AddPlayerCash(source, 0), 'add 0 refused')
-                assertFalse(exports.whip_core:AddPlayerCash(source, -100), 'add -100 refused')
-                assertFalse(exports.whip_core:RemovePlayerCash(source, 0), 'remove 0 refused')
-                assertFalse(exports.whip_core:RemovePlayerCash(source, -100), 'remove -100 refused')
+                local paid = exports.whip_core:PayPlayer(source, 0, CASH)
+                assertType(paid, 'table', 'pay 0 answers')
+                assertEqual(paid.amount, 0, 'and paid nothing')
+                local receipt = exports.whip_core:ChargePlayer(source, 0, CASH)
+                assertType(receipt, 'table', 'charge 0 answers')
+                assertEqual(receipt.amount, 0, 'and took nothing')
+                local okPay, payWhy = exports.whip_core:PayPlayer(source, -100, CASH)
+                assertFalse(okPay, 'pay -100 refused')
+                assertEqual(payWhy, 'Amount must be a whole number of 0 or more', 'with the amount rule')
+                assertFalse(exports.whip_core:ChargePlayer(source, -100, CASH), 'charge -100 refused')
 
                 assertEqual(exports.whip_core:GetPlayerCash(source), before,
                     'and none of the four moved the balance')
@@ -200,12 +226,12 @@ RegisterTestModule({
 
                 for label, bad in pairs({ ['a word'] = 'abc', ['NaN'] = 0 / 0,
                                           ['infinity'] = math.huge, ['half a note'] = 0.5 }) do
-                    local okA, added = pcall(exports.whip_core.AddPlayerCash, exports.whip_core, source, bad)
-                    assertTrue(okA, 'add ' .. label .. ' answered rather than threw')
-                    assertFalse(added, 'add ' .. label .. ' refused')
-                    local okR, removed = pcall(exports.whip_core.RemovePlayerCash, exports.whip_core, source, bad)
-                    assertTrue(okR, 'remove ' .. label .. ' answered rather than threw')
-                    assertFalse(removed, 'remove ' .. label .. ' refused')
+                    local okP, paid = pcall(exports.whip_core.PayPlayer, exports.whip_core, source, bad, CASH)
+                    assertTrue(okP, 'pay ' .. label .. ' answered rather than threw')
+                    assertFalse(paid, 'pay ' .. label .. ' refused')
+                    local okC, receipt = pcall(exports.whip_core.ChargePlayer, exports.whip_core, source, bad, CASH)
+                    assertTrue(okC, 'charge ' .. label .. ' answered rather than threw')
+                    assertFalse(receipt, 'charge ' .. label .. ' refused')
                 end
 
                 assertEqual(exports.whip_core:GetPlayerCash(source), before, 'and the balance never moved')
@@ -320,8 +346,8 @@ RegisterTestModule({
                 local GONE = 99999
 
                 assertEqual(exports.whip_core:GetPlayerCash(GONE), 0, 'cash reads 0, not nil')
-                assertFalse(exports.whip_core:AddPlayerCash(GONE, 10), 'add reports failure')
-                assertFalse(exports.whip_core:RemovePlayerCash(GONE, 10), 'remove reports failure')
+                assertFalse(exports.whip_core:PayPlayer(GONE, 10, CASH), 'pay reports failure')
+                assertFalse(exports.whip_core:ChargePlayer(GONE, 10, CASH), 'charge reports failure')
                 assertNil(exports.whip_core:GetPlayerMetadata(GONE, META_KEY), 'metadata reads nil')
                 assertFalse(exports.whip_core:SetPlayerMetadata(GONE, META_KEY, 1), 'set reports failure')
                 assertNil(exports.whip_core:GetPlayerCoords(GONE), 'coords read nil')

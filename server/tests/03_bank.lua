@@ -20,11 +20,11 @@ RegisterTestModule({
         ctx.charId = player.charId
 
         -- Every person argument is a server id or { charId = n } (whip's person rule, audit 3 DX-17).
-        local acc, err = exports.whip_core:CreateBankAccount(source, '_test_account', 'personal')
+        local acc, err = exports.whip_core:CreateBankAccount(source, '_test_account', { type = 'personal' })
         if not acc then error('Setup failed: ' .. tostring(err)) end
         ctx.accountId, ctx.accountNumber = acc.accountId, acc.accountNumber
 
-        local acc2, err2 = exports.whip_core:CreateBankAccount(source, '_test_account_2', 'personal')
+        local acc2, err2 = exports.whip_core:CreateBankAccount(source, '_test_account_2', { type = 'personal' })
         if not acc2 then error('Setup failed: ' .. tostring(err2)) end
         ctx.accountId2 = acc2.accountId
     end,
@@ -86,10 +86,10 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'GetBankAccountByNumber finds by number',
+            name = 'GetBankAccount finds by { number }',
             fn = function(source, ctx)
-                local acc = exports.whip_core:GetBankAccountByNumber(ctx.accountNumber)
-                assertNotNil(acc, 'GetBankAccountByNumber')
+                local acc = exports.whip_core:GetBankAccount({ number = ctx.accountNumber })
+                assertNotNil(acc, 'GetBankAccount({ number })')
                 assertEqual(acc.accountId, ctx.accountId, 'accountId')
             end,
         },
@@ -124,7 +124,7 @@ RegisterTestModule({
             name = 'BankDeposit increases balance',
             fn = function(source, ctx)
                 local before = exports.whip_core:GetBankAccount(ctx.accountId)
-                local ok, err = exports.whip_core:BankDeposit(ctx.accountId, 500, { charId = ctx.charId }, '_test_deposit')
+                local ok, err = exports.whip_core:BankDeposit(ctx.accountId, 500, { charId = ctx.charId }, { reason = '_test_deposit' })
                 assertOk(ok, err, 'BankDeposit')
                 local after = exports.whip_core:GetBankAccount(ctx.accountId)
                 assertEqual(after.balance, before.balance + 500, 'balance after deposit')
@@ -134,7 +134,7 @@ RegisterTestModule({
             name = 'BankWithdraw decreases balance',
             fn = function(source, ctx)
                 local before = exports.whip_core:GetBankAccount(ctx.accountId)
-                local ok, err = exports.whip_core:BankWithdraw(ctx.accountId, 200, { charId = ctx.charId }, '_test_withdraw')
+                local ok, err = exports.whip_core:BankWithdraw(ctx.accountId, 200, { charId = ctx.charId }, { reason = '_test_withdraw' })
                 assertOk(ok, err, 'BankWithdraw')
                 local after = exports.whip_core:GetBankAccount(ctx.accountId)
                 assertEqual(after.balance, before.balance - 200, 'balance after withdraw')
@@ -147,11 +147,11 @@ RegisterTestModule({
                 local ref = { accountId = ctx.accountId }
                 local first = exports.whip_core:GetBalance(ref)
                 assertEqual(first, exports.whip_core:GetBankAccount(ctx.accountId).balance, 'the first read is the row\'s')
-                assertOk(exports.whip_core:BankDeposit(ctx.accountId, 40, { charId = ctx.charId }, '_test_balance'))
+                assertOk(exports.whip_core:BankDeposit(ctx.accountId, 40, { charId = ctx.charId }, { reason = '_test_balance' }))
                 assertEqual(exports.whip_core:GetBalance(ref), first + 40, 'after a deposit')
-                assertOk(exports.whip_core:BankWithdraw(ctx.accountId, 15, { charId = ctx.charId }, '_test_balance'))
+                assertOk(exports.whip_core:BankWithdraw(ctx.accountId, 15, { charId = ctx.charId }, { reason = '_test_balance' }))
                 assertEqual(exports.whip_core:GetBalance(ref), first + 25, 'after a withdrawal')
-                assertOk(exports.whip_core:BankSystemTransfer(ctx.accountId, ctx.accountId2, 5, '_test_balance'))
+                assertOk(exports.whip_core:BankSystemTransfer(ctx.accountId, ctx.accountId2, 5, { reason = '_test_balance' }))
                 assertEqual(exports.whip_core:GetBalance(ref), first + 20, 'after a transfer out')
                 assertEqual(exports.whip_core:GetBalance(ref), exports.whip_core:GetBankAccount(ctx.accountId).balance,
                     'still the row\'s')
@@ -172,7 +172,7 @@ RegisterTestModule({
             -- different bug entirely.
             name = 'BankWithdraw more than balance is refused by the pre-check',
             fn = function(source, ctx)
-                local ok, err = exports.whip_core:BankWithdraw(ctx.accountId, 999999999, { charId = ctx.charId }, '_test_overdraft')
+                local ok, err = exports.whip_core:BankWithdraw(ctx.accountId, 999999999, { charId = ctx.charId }, { reason = '_test_overdraft' })
                 assertFalse(ok, 'BankWithdraw overdraft should fail')
                 assertEqual(err, 'Insufficient funds',
                     'refused by the pre-check, not by a failed transaction')
@@ -227,11 +227,11 @@ RegisterTestModule({
             name = 'BankTransfer moves money between accounts',
             fn = function(source, ctx)
                 -- Ensure source has funds
-                local funded, fErr = exports.whip_core:BankDeposit(ctx.accountId, 100, { charId = ctx.charId }, '_test_prefund')
+                local funded, fErr = exports.whip_core:BankDeposit(ctx.accountId, 100, { charId = ctx.charId }, { reason = '_test_prefund' })
                 assertOk(funded, fErr, 'prefund deposit')
                 local b1 = exports.whip_core:GetBankAccount(ctx.accountId).balance
                 local b2 = exports.whip_core:GetBankAccount(ctx.accountId2).balance
-                local ok, err = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId2, 50, { charId = ctx.charId }, '_test_transfer')
+                local ok, err = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId2, 50, { charId = ctx.charId }, { reason = '_test_transfer' })
                 assertOk(ok, err, 'BankTransfer')
                 assertEqual(exports.whip_core:GetBankAccount(ctx.accountId).balance, b1 - 50, 'source balance')
                 assertEqual(exports.whip_core:GetBankAccount(ctx.accountId2).balance, b2 + 50, 'dest balance')
@@ -257,24 +257,24 @@ RegisterTestModule({
                     local amount = bad[i]
                     local label = tostring(amount)
 
-                    local d, dErr = exports.whip_core:BankDeposit(ctx.accountId, amount, { charId = ctx.charId }, '_test_bad_amount')
+                    local d, dErr = exports.whip_core:BankDeposit(ctx.accountId, amount, { charId = ctx.charId }, { reason = '_test_bad_amount' })
                     assertFalse(d, ('BankDeposit(%s) refused'):format(label))
                     assertEqual(dErr, WHY, ('BankDeposit(%s) reason'):format(label))
 
-                    local w, wErr = exports.whip_core:BankWithdraw(ctx.accountId, amount, { charId = ctx.charId }, '_test_bad_amount')
+                    local w, wErr = exports.whip_core:BankWithdraw(ctx.accountId, amount, { charId = ctx.charId }, { reason = '_test_bad_amount' })
                     assertFalse(w, ('BankWithdraw(%s) refused'):format(label))
                     assertEqual(wErr, WHY, ('BankWithdraw(%s) reason'):format(label))
 
-                    local t, tErr = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId2, amount, { charId = ctx.charId }, '_test_bad_amount')
+                    local t, tErr = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId2, amount, { charId = ctx.charId }, { reason = '_test_bad_amount' })
                     assertFalse(t, ('BankTransfer(%s) refused'):format(label))
                     assertEqual(tErr, WHY, ('BankTransfer(%s) reason'):format(label))
 
-                    local s, sErr = exports.whip_core:BankSystemDeposit(ctx.accountId, amount, '_test_bad_amount')
+                    local s, sErr = exports.whip_core:BankSystemDeposit(ctx.accountId, amount, { reason = '_test_bad_amount' })
                     assertFalse(s, ('BankSystemDeposit(%s) refused'):format(label))
                     assertEqual(sErr, WHY, ('BankSystemDeposit(%s) reason'):format(label))
                 end
 
-                local same, sameErr = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId, 10, { charId = ctx.charId }, '_test_same')
+                local same, sameErr = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId, 10, { charId = ctx.charId }, { reason = '_test_same' })
                 assertFalse(same, 'a transfer to the same account is refused')
                 assertEqual(sameErr, 'Cannot transfer to the same account', 'and says so')
 
@@ -292,15 +292,15 @@ RegisterTestModule({
                 local b1 = exports.whip_core:GetBankAccount(ctx.accountId).balance
                 local b2 = exports.whip_core:GetBankAccount(ctx.accountId2).balance
 
-                local d, dErr = exports.whip_core:BankDeposit(ctx.accountId, 10, { charId = 999999999 }, '_test_noaccess')
+                local d, dErr = exports.whip_core:BankDeposit(ctx.accountId, 10, { charId = 999999999 }, { reason = '_test_noaccess' })
                 assertFalse(d, 'deposit refused')
                 assertEqual(dErr, 'No deposit permission on this account', 'deposit reason')
 
-                local w, wErr = exports.whip_core:BankWithdraw(ctx.accountId, 10, { charId = 999999999 }, '_test_noaccess')
+                local w, wErr = exports.whip_core:BankWithdraw(ctx.accountId, 10, { charId = 999999999 }, { reason = '_test_noaccess' })
                 assertFalse(w, 'withdraw refused')
                 assertEqual(wErr, 'No withdraw permission on this account', 'withdraw reason')
 
-                local t, tErr = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId2, 10, { charId = 999999999 }, '_test_noaccess')
+                local t, tErr = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId2, 10, { charId = 999999999 }, { reason = '_test_noaccess' })
                 assertFalse(t, 'transfer refused')
                 assertEqual(tErr, 'No withdraw permission on source account', 'transfer reason')
 
@@ -317,25 +317,25 @@ RegisterTestModule({
                 local b1 = exports.whip_core:GetBankAccount(ctx.accountId).balance
                 DbQuery('UPDATE `bank_accounts` SET `frozen` = 1 WHERE `accountId` = ?', { ctx.accountId })
 
-                local d, dErr = exports.whip_core:BankDeposit(ctx.accountId, 10, { charId = ctx.charId }, '_test_frozen')
+                local d, dErr = exports.whip_core:BankDeposit(ctx.accountId, 10, { charId = ctx.charId }, { reason = '_test_frozen' })
                 assertFalse(d, 'deposit refused')
                 assertEqual(dErr, 'Account is frozen', 'deposit reason')
 
-                local w, wErr = exports.whip_core:BankWithdraw(ctx.accountId, 10, { charId = ctx.charId }, '_test_frozen')
+                local w, wErr = exports.whip_core:BankWithdraw(ctx.accountId, 10, { charId = ctx.charId }, { reason = '_test_frozen' })
                 assertFalse(w, 'withdraw refused')
                 assertEqual(wErr, 'Account is frozen', 'withdraw reason')
 
-                local out, outErr = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId2, 10, { charId = ctx.charId }, '_test_frozen')
+                local out, outErr = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId2, 10, { charId = ctx.charId }, { reason = '_test_frozen' })
                 assertFalse(out, 'transfer out refused')
                 assertEqual(outErr, 'Source account is frozen', 'transfer-out reason')
 
                 -- Money cannot be parked IN a frozen account either — the second account holds the
                 -- 50 the transfer test moved, so this is refused for the freeze, not for funds.
-                local into, intoErr = exports.whip_core:BankTransfer(ctx.accountId2, ctx.accountId, 1, { charId = ctx.charId }, '_test_frozen')
+                local into, intoErr = exports.whip_core:BankTransfer(ctx.accountId2, ctx.accountId, 1, { charId = ctx.charId }, { reason = '_test_frozen' })
                 assertFalse(into, 'transfer in refused')
                 assertEqual(intoErr, 'Destination account is frozen', 'transfer-in reason')
 
-                local sys, sysErr = exports.whip_core:BankSystemDeposit(ctx.accountId, 10, '_test_frozen')
+                local sys, sysErr = exports.whip_core:BankSystemDeposit(ctx.accountId, 10, { reason = '_test_frozen' })
                 assertFalse(sys, 'even a system deposit is refused')
                 assertEqual(sysErr, 'Account is frozen', 'system deposit reason')
 
@@ -376,8 +376,8 @@ RegisterTestModule({
             name = 'BankSystemDeposit works without an actor, and takes { reason, actorCharId }',
             fn = function(source, ctx)
                 local before = exports.whip_core:GetBankAccount(ctx.accountId).balance
-                local ok, err = exports.whip_core:BankSystemDeposit(ctx.accountId, 100, '_test_system')
-                assertOk(ok, err, 'BankSystemDeposit with a plain reason')
+                local ok, err = exports.whip_core:BankSystemDeposit(ctx.accountId, 100, { reason = '_test_system' })
+                assertOk(ok, err, 'BankSystemDeposit with a reason and no actor')
                 assertEqual(exports.whip_core:GetBankAccount(ctx.accountId).balance, before + 100, 'balance after system deposit')
 
                 -- MON-4: the options form, so the reason and the actor cannot swap places.
@@ -392,12 +392,12 @@ RegisterTestModule({
             -- permission check — fines, fees, payroll — and the same refusals otherwise.
             name = 'BankSystemWithdraw and BankSystemTransfer move money without a permission check',
             fn = function(source, ctx)
-                local ok, err = exports.whip_core:BankSystemDeposit(ctx.accountId, 40, '_test_sys_prefund')
+                local ok, err = exports.whip_core:BankSystemDeposit(ctx.accountId, 40, { reason = '_test_sys_prefund' })
                 assertOk(ok, err, 'prefund')
                 local b1 = exports.whip_core:GetBankAccount(ctx.accountId).balance
                 local b2 = exports.whip_core:GetBankAccount(ctx.accountId2).balance
 
-                ok, err = exports.whip_core:BankSystemWithdraw(ctx.accountId, 15, '_test_sys_withdraw')
+                ok, err = exports.whip_core:BankSystemWithdraw(ctx.accountId, 15, { reason = '_test_sys_withdraw' })
                 assertOk(ok, err, 'system withdrawal')
                 assertEqual(exports.whip_core:GetBankAccount(ctx.accountId).balance, b1 - 15, 'taken out')
 
@@ -406,12 +406,49 @@ RegisterTestModule({
                 assertEqual(exports.whip_core:GetBankAccount(ctx.accountId).balance, b1 - 25, 'source after transfer')
                 assertEqual(exports.whip_core:GetBankAccount(ctx.accountId2).balance, b2 + 10, 'destination after transfer')
 
-                local over, overErr = exports.whip_core:BankSystemWithdraw(ctx.accountId, 999999999, '_test_sys_over')
+                local over, overErr = exports.whip_core:BankSystemWithdraw(ctx.accountId, 999999999, { reason = '_test_sys_over' })
                 assertFalse(over, 'a system withdrawal still cannot overdraw')
                 assertEqual(overErr, 'Insufficient funds', 'and says so')
                 local same, sameErr = exports.whip_core:BankSystemTransfer(ctx.accountId, ctx.accountId, 1)
                 assertFalse(same, 'nor transfer to the same account')
                 assertEqual(sameErr, 'Cannot transfer to the same account', 'and says so')
+            end,
+        },
+        {
+            -- 14 Nov 2026: every bank money call takes its reason in an options table. A plain string where
+            -- the options go was the old shape (the reason itself, or the system calls' reasonOrOpts), and is
+            -- refused now, saying what opts is, before anything moves.
+            name = 'A bare reason where the options go is refused by every bank money call, and moves nothing',
+            fn = function(source, ctx)
+                local b1 = exports.whip_core:GetBankAccount(ctx.accountId).balance
+                local b2 = exports.whip_core:GetBankAccount(ctx.accountId2).balance
+                local me = { charId = ctx.charId }
+                local PLAYER, SYSTEM = 'opts is { reason = ... }', 'opts is { reason?, actorCharId? }'
+
+                local d, dErr = exports.whip_core:BankDeposit(ctx.accountId, 1, me, '_test_bare')
+                assertFalse(d, 'BankDeposit refused')
+                assertEqual(dErr, PLAYER, 'BankDeposit reason')
+                local w, wErr = exports.whip_core:BankWithdraw(ctx.accountId, 1, me, '_test_bare')
+                assertFalse(w, 'BankWithdraw refused')
+                assertEqual(wErr, PLAYER, 'BankWithdraw reason')
+                local t, tErr = exports.whip_core:BankTransfer(ctx.accountId, ctx.accountId2, 1, me, '_test_bare')
+                assertFalse(t, 'BankTransfer refused')
+                assertEqual(tErr, PLAYER, 'BankTransfer reason')
+
+                local sd, sdErr = exports.whip_core:BankSystemDeposit(ctx.accountId, 1, '_test_bare')
+                assertFalse(sd, 'BankSystemDeposit refused')
+                assertEqual(sdErr, SYSTEM, 'BankSystemDeposit reason')
+                local sw, swErr = exports.whip_core:BankSystemWithdraw(ctx.accountId, 1, '_test_bare')
+                assertFalse(sw, 'BankSystemWithdraw refused')
+                assertEqual(swErr, SYSTEM, 'BankSystemWithdraw reason')
+                local st, stErr = exports.whip_core:BankSystemTransfer(ctx.accountId, ctx.accountId2, 1, '_test_bare')
+                assertFalse(st, 'BankSystemTransfer refused')
+                assertEqual(stErr, SYSTEM, 'BankSystemTransfer reason')
+
+                assertEqual(exports.whip_core:GetBankAccount(ctx.accountId).balance, b1, 'first balance unchanged')
+                assertEqual(exports.whip_core:GetBankAccount(ctx.accountId2).balance, b2, 'second balance unchanged')
+                assertDbRowCount('SELECT 1 FROM `bank_transactions` WHERE `message` = ?', { '_test_bare' }, 0,
+                    'and no refused call wrote a ledger row')
             end,
         },
         {
@@ -603,7 +640,7 @@ RegisterTestModule({
                 local acc = exports.whip_core:GetBankAccount(ctx.accountId)
                 assertNotNil(acc, 'the account exists')
                 if acc.balance <= 0 then
-                    local ok, err = exports.whip_core:BankSystemDeposit(ctx.accountId, 1, '_test_nonzero')
+                    local ok, err = exports.whip_core:BankSystemDeposit(ctx.accountId, 1, { reason = '_test_nonzero' })
                     assertOk(ok, err, 'gave the account a balance to refuse on')
                 end
 
@@ -623,7 +660,7 @@ RegisterTestModule({
 
                 local acc = exports.whip_core:GetBankAccount(ctx.accountId2)
                 if acc and acc.balance > 0 then
-                    local drained, dErr = exports.whip_core:BankWithdraw(ctx.accountId2, acc.balance, { charId = ctx.charId }, '_test_drain')
+                    local drained, dErr = exports.whip_core:BankWithdraw(ctx.accountId2, acc.balance, { charId = ctx.charId }, { reason = '_test_drain' })
                     assertOk(drained, dErr, 'drained to zero first')
                 end
 
@@ -654,7 +691,7 @@ RegisterTestModule({
                 ctx.extraAccounts, ctx.extraSavings, ctx.closedExtra = {}, {}, {}
                 local refusedWhy
                 for _ = 1, 101 do
-                    local acc, why = exports.whip_core:CreateBankAccount(source, '_test_extra', 'savings')
+                    local acc, why = exports.whip_core:CreateBankAccount(source, '_test_extra', { type = 'savings' })
                     if not acc then refusedWhy = why break end
                     ctx.extraAccounts[#ctx.extraAccounts + 1] = acc.accountId
                     ctx.extraSavings[#ctx.extraSavings + 1] = acc.accountId
@@ -667,12 +704,12 @@ RegisterTestModule({
                     { ctx.charId })
                 assertTrue((tonumber(held[1] and held[1].n) or 0) >= limit, 'refused only at the limit')
 
-                local shared, sharedWhy = exports.whip_core:CreateBankAccount(source, '_test_extra', 'shared')
+                local shared, sharedWhy = exports.whip_core:CreateBankAccount(source, '_test_extra', { type = 'shared' })
                 if shared then ctx.extraAccounts[#ctx.extraAccounts + 1] = shared.accountId end
                 assertFalse(shared, 'a shared account counts the same')
                 assertEqual(sharedWhy, refusedWhy, 'and is refused the same way')
 
-                local personal, personalWhy = exports.whip_core:CreateBankAccount(source, '_test_extra', 'personal')
+                local personal, personalWhy = exports.whip_core:CreateBankAccount(source, '_test_extra', { type = 'personal' })
                 if personal then ctx.extraAccounts[#ctx.extraAccounts + 1] = personal.accountId end
                 assertOk(personal, personalWhy, 'a personal account is not limited')
 
@@ -680,7 +717,7 @@ RegisterTestModule({
                 local closeId = table.remove(ctx.extraSavings)
                 assertOk(exports.whip_core:CloseBankAccount(closeId, source), nil, 'one savings account closed')
                 ctx.closedExtra[#ctx.closedExtra + 1] = closeId
-                local again, againWhy = exports.whip_core:CreateBankAccount(source, '_test_extra', 'savings')
+                local again, againWhy = exports.whip_core:CreateBankAccount(source, '_test_extra', { type = 'savings' })
                 if again then
                     ctx.extraAccounts[#ctx.extraAccounts + 1] = again.accountId
                     ctx.extraSavings[#ctx.extraSavings + 1] = again.accountId
@@ -713,11 +750,11 @@ RegisterTestModule({
                     assertEqual(dWhy, 'Cannot close default account', 'and says why')
                 end
 
-                assertOk(exports.whip_core:BankSystemDeposit(savingsId, 1, '_test_nonzero'), nil, 'money in')
+                assertOk(exports.whip_core:BankSystemDeposit(savingsId, 1, { reason = '_test_nonzero' }), nil, 'money in')
                 local full, fullWhy = exports.whip_core:CloseBankAccount(savingsId, source)
                 assertFalse(full, 'refused while it holds money')
                 assertEqual(fullWhy, 'Account must have zero balance', 'and says why')
-                assertOk(exports.whip_core:BankSystemWithdraw(savingsId, 1, '_test_drain'), nil, 'money out')
+                assertOk(exports.whip_core:BankSystemWithdraw(savingsId, 1, { reason = '_test_drain' }), nil, 'money out')
 
                 local ok, why = exports.whip_core:CloseBankAccount(savingsId, source)
                 assertOk(ok, why, 'the owner closes their empty savings account')

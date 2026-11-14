@@ -277,11 +277,11 @@ RegisterTestModule({
 
                 -- Give it an identity, the way a first logged touch does — LogActivity names the slot
                 -- by address too.
-                assertTrue(exports.whip_core:LogActivity(source, 'test_event', 'mint', addr), 'uid minted')
+                assertTrue(exports.whip_core:LogActivity(source, 'test_event', { detail = 'mint', slotData = addr }), 'uid minted')
                 local uid = exports.whip_core:GetItemAt(addr).metadata.uid
                 assertNotNil(uid, 'the item has a uid')
 
-                local oldForm, oldErr = exports.whip_core:LogActivity(source, 'test_event', 'x', { container = 'player', slot = slot })
+                local oldForm, oldErr = exports.whip_core:LogActivity(source, 'test_event', { detail = 'x', slotData = { container = 'player', slot = slot } })
                 assertFalse(oldForm, 'the old { container, slot } spelling is refused, not logged against nothing')
                 assertNotNil(oldErr, 'with a reason')
 
@@ -501,16 +501,19 @@ RegisterTestModule({
                 assertNotNil(rem, 'itemRemoved fired')
                 assertEqual(rem and rem.info and rem.info.count, 0, 'they carry none now')
 
-                -- Cash is an item: it used to fire nothing.
+                -- Cash is an item: it used to fire nothing. (PayPlayer drops a note that does not fit at
+                -- the tester's feet, so room is asked first.)
                 mark = #_events
-                if not exports.whip_core:AddPlayerCash(source, 1, 'ev cash') then
+                if not exports.whip_core:CanFitItem(source, 'cash', 1) then
                     skip('no room in the pockets for a banknote')
                 end
+                local paid, payWhy = exports.whip_core:PayPlayer(source, 1, { method = 'cash', reason = 'ev cash' })
+                assertOk(paid, payWhy, 'a banknote paid')
                 local cash = waitFor(function()
                     for _, e in ipairs(eventsFor(mark, 'cash')) do if e.kind == 'added' then return e end end
                 end, 2000)
                 assertNotNil(cash, 'itemAdded fired for cash')
-                exports.whip_core:RemovePlayerCash(source, 1, 'ev cash back')
+                exports.whip_core:ChargePlayer(source, 1, { method = 'cash', reason = 'ev cash back' })
 
                 -- Into a STASH, nothing reached the player's pockets: no event for them.
                 mark = #_events
@@ -669,7 +672,7 @@ RegisterTestModule({
                 local slot = lastSlot()
                 local addr = PocketAddr(source, 'player', slot)
                 SeedSlot(source, 'player', slot, SINGLE, 1)
-                assertTrue(exports.whip_core:LogActivity(source, 'test_event', 'mint for FindItemByUid', addr),
+                assertTrue(exports.whip_core:LogActivity(source, 'test_event', { detail = 'mint for FindItemByUid', slotData = addr }),
                     'a uid minted')
                 local item = exports.whip_core:GetItemAt(addr)
                 local uid = item and item.metadata and item.metadata.uid
@@ -853,7 +856,7 @@ RegisterTestModule({
             end,
         },
         {
-            name = 'Shop exports answer with reasons, and GetShopBy finds by what you have',
+            name = 'Shop exports answer with reasons, and GetShop finds by what you have',
             fn = function()
                 local okCall, shop, err = pcall(exports.whip_core.CreateShop, exports.whip_core, nil)
                 assertTrue(okCall, 'CreateShop(nil) answers rather than throws')
@@ -868,8 +871,8 @@ RegisterTestModule({
                 assertFalse(upd, 'an unknown shop cannot be updated')
                 assertEqual(updErr, 'Shop not found', 'and it says why')
 
-                assertNil(exports.whip_core:GetShopBy('id', 987654), 'GetShopBy id finds nothing for an unknown shop')
-                assertType(exports.whip_core:GetShopBy('job', 987654), 'table', 'GetShopBy job answers a list')
+                assertNil(exports.whip_core:GetShop({ id = 987654 }), 'GetShop({ id }) finds nothing for an unknown shop')
+                assertType(exports.whip_core:GetShops({ job = 987654 }), 'table', 'GetShops({ job }) returns a list')
             end,
         },
         {
@@ -888,9 +891,11 @@ RegisterTestModule({
         {
             name = 'Cash says why it refused',
             fn = function(source)
-                local ok, err = exports.whip_core:RemovePlayerCash(source, 999999999)
-                assertFalse(ok, 'more cash than they have is refused')
-                assertEqual(err, 'Not enough cash', 'and it says why')
+                -- ChargePlayer in cash (RemovePlayerCash, which said only 'Not enough cash', until 14 Nov 2026).
+                local receipt, err = exports.whip_core:ChargePlayer(source, 999999999, { method = 'cash' })
+                assertFalse(receipt, 'more cash than they have is refused')
+                assertTrue(type(err) == 'string' and err:find('Not enough cash (have $', 1, true) == 1,
+                    'and it says why, with what they have (got: ' .. tostring(err) .. ')')
             end,
         },
     },

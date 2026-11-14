@@ -5,8 +5,10 @@ lua54 'yes'
 name 'whip_test'
 description 'Automated test suite for whip_core'
 version '1.0.0'
+whip_updates 'WHIPFX/whip_test'   -- whip_core checks this repository's releases for a newer version
 
 dependency 'whip_core'
+whip_requires '1.0'   -- the whip_core it is built for: the setup report flags an older one
 
 -- A stand-in theme resource for module 69 (whip_core/server/property_themes.lua): its exports are in
 -- server/tests/69_property_themes.lua, and it has no homes but while that module runs.

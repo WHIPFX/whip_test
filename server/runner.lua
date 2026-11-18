@@ -1361,13 +1361,22 @@ function SendReport(source)
         if r.side == 'server' and not r.meta then serverResults = serverResults + 1 end
     end
 
+    local clientRows = 0
+    for _, r in ipairs(results) do
+        if r.side == 'client' and not r.meta then clientRows = clientRows + 1 end
+    end
+    -- Lost modules are a failed run, not a pass with a footnote: "ALL 284 TESTS PASSED" over a warning
+    -- read as green when 56 tests never ran.
+    local lost = serverResults ~= expectedServer
+        or (clientInfo ~= nil and clientRows ~= (clientInfo.expected or clientRows))
+
     chatMsg(source, '')
     chatMsg(source, ('^7═══════════════════════════════════'):format())
-    if failed == 0 and skipped == 0 then
+    if failed == 0 and skipped == 0 and not lost then
         chatMsg(source, ('^2  ALL %d TESTS PASSED ^7(%.1fs)'):format(passed, totalTime / 1000))
     else
-        chatMsg(source, ('^2  %d passed  ^1%d failed  ^3%d skipped  ^7(%.1fs)')
-            :format(passed, failed, skipped, totalTime / 1000))
+        chatMsg(source, ('^2  %d passed  ^1%d failed  ^3%d skipped%s  ^7(%.1fs)')
+            :format(passed, failed, skipped, lost and '  ^1INCOMPLETE' or '', totalTime / 1000))
     end
     if serverResults ~= expectedServer then
         chatMsg(source, ('^1  ⚠ expected %d server results, got %d — modules were lost')
@@ -1378,10 +1387,6 @@ function SendReport(source)
     -- what registered. A client test FILE that throws while loading never registers at all, so the
     -- only trace it leaves is a gap in the module order numbers.
     if clientInfo then
-        local clientRows = 0
-        for _, r in ipairs(results) do
-            if r.side == 'client' and not r.meta then clientRows = clientRows + 1 end
-        end
         if clientRows ~= (clientInfo.expected or clientRows) then
             chatMsg(source, ('^1  ⚠ expected %d client results, got %d'):format(clientInfo.expected, clientRows))
         end

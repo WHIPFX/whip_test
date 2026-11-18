@@ -424,7 +424,10 @@ end
 ---@param userId number|nil
 function DisposeStranger(userId)
     if not userId then return end
-    local ok, err = pcall(MySQL.query.await, 'DELETE FROM `users` WHERE `userId` = ?', { userId })
+    -- Only a row MakeStranger made (its license): a wrong id from a test, or any other resource calling the export,
+    -- must never delete a real account and its characters with it (ON DELETE CASCADE).
+    local ok, err = pcall(MySQL.query.await,
+        "DELETE FROM `users` WHERE `userId` = ? AND `license` LIKE '\\_test:stranger:%'", { userId })
     if not ok then print(('[whip_test] could not remove test stranger %s: %s'):format(tostring(userId), tostring(err))) end
 end
 
@@ -806,7 +809,12 @@ exports('MakeStranger', function()
     if not (ok and on) then return nil end
     return MakeStranger()
 end)
-exports('DisposeStranger', function(userId) DisposeStranger(userId) return true end)
+exports('DisposeStranger', function(userId)
+    local ok, on = pcall(function() return exports.whip_core:__TestSeamsEnabled() end)   -- as MakeStranger
+    if not (ok and on) then return false end
+    DisposeStranger(userId)
+    return true
+end)
 
 -- ============================================
 -- Inventory Cleanup — remove all test items
